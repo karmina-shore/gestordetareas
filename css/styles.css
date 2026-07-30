@@ -39,6 +39,9 @@
 
 * { box-sizing: border-box; }
 
+/* El atributo [hidden] debe ganar siempre, sin importar otras reglas de display */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   padding: 0;
