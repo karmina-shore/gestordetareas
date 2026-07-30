@@ -16,7 +16,7 @@ const VERTIENTE_LABELS = {
 
 const AREAS = ['Brand', 'MKT', 'Comercial', 'Dirección', 'Administración', 'Culture & People', 'Producción', 'Postproducción', 'Cliente'];
 
-let supabase = null;
+let db = null;
 let state = {
   tasks: [],
   subtasks: [],       // all subtasks, filtered by task_id when needed
@@ -40,7 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
-  supabase = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
+  db = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
 
   if (sessionStorage.getItem('shore_kanban_authed') === 'true') {
     enterApp();
@@ -69,7 +69,7 @@ function setupLoginForm() {
     const pwd = document.getElementById('login-password').value;
     const hash = await sha256Hex(pwd);
 
-    const { data, error } = await supabase.from('app_auth').select('password_hash').eq('id', 1).single();
+    const { data, error } = await db.from('app_auth').select('password_hash').eq('id', 1).single();
 
     if (error || !data) {
       showToast('No se pudo verificar la contraseña. Revisa la configuración de Supabase.');
@@ -98,9 +98,9 @@ async function enterApp() {
 // ============================================================
 async function loadAll() {
   const [tasksRes, subtasksRes, quickRes] = await Promise.all([
-    supabase.from('tasks').select('*').order('position', { ascending: true }),
-    supabase.from('subtasks').select('*').order('position', { ascending: true }),
-    supabase.from('quick_pendings').select('*').order('created_at', { ascending: true }),
+    db.from('tasks').select('*').order('position', { ascending: true }),
+    db.from('subtasks').select('*').order('position', { ascending: true }),
+    db.from('quick_pendings').select('*').order('created_at', { ascending: true }),
   ]);
 
   if (tasksRes.error) { showToast('Error cargando tareas: ' + tasksRes.error.message); return; }
@@ -297,7 +297,7 @@ async function onColumnDrop(e) {
   task.status = newStatus;
   renderBoard();
 
-  const { error } = await supabase.from('tasks').update({ status: newStatus }).eq('id', draggedTaskId);
+  const { error } = await db.from('tasks').update({ status: newStatus }).eq('id', draggedTaskId);
   if (error) showToast('No se pudo actualizar el estatus: ' + error.message);
   draggedTaskId = null;
 }
@@ -441,11 +441,11 @@ async function onSaveTask(e) {
   let taskId = existingId;
 
   if (existingId) {
-    const { error } = await supabase.from('tasks').update(payload).eq('id', existingId);
+    const { error } = await db.from('tasks').update(payload).eq('id', existingId);
     if (error) { showToast('Error al guardar: ' + error.message); return; }
   } else {
     payload.position = state.tasks.filter(t => t.status === payload.status).length;
-    const { data, error } = await supabase.from('tasks').insert(payload).select().single();
+    const { data, error } = await db.from('tasks').insert(payload).select().single();
     if (error) { showToast('Error al crear: ' + error.message); return; }
     taskId = data.id;
   }
@@ -462,15 +462,15 @@ async function syncSubtasks(taskId) {
   const removedIds = existingIds.filter(id => !keptIds.includes(id));
 
   if (removedIds.length) {
-    await supabase.from('subtasks').delete().in('id', removedIds);
+    await db.from('subtasks').delete().in('id', removedIds);
   }
 
   for (let i = 0; i < state.editingSubtasks.length; i++) {
     const s = state.editingSubtasks[i];
     if (s.id) {
-      await supabase.from('subtasks').update({ title: s.title, done: s.done, position: i }).eq('id', s.id);
+      await db.from('subtasks').update({ title: s.title, done: s.done, position: i }).eq('id', s.id);
     } else {
-      await supabase.from('subtasks').insert({ task_id: taskId, title: s.title, done: s.done, position: i });
+      await db.from('subtasks').insert({ task_id: taskId, title: s.title, done: s.done, position: i });
     }
   }
 }
@@ -480,7 +480,7 @@ async function onDeleteTask() {
   if (!taskId) return;
   if (!confirm('¿Eliminar esta tarea? Esta acción no se puede deshacer.')) return;
 
-  const { error } = await supabase.from('tasks').delete().eq('id', taskId);
+  const { error } = await db.from('tasks').delete().eq('id', taskId);
   if (error) { showToast('Error al eliminar: ' + error.message); return; }
 
   closeTaskModal();
@@ -513,11 +513,11 @@ function setupQuickPanel() {
     const title = input.value.trim();
     if (!title) return;
 
-    const { error } = await supabase.from('quick_pendings').insert({ title, position: state.quickPendings.length });
+    const { error } = await db.from('quick_pendings').insert({ title, position: state.quickPendings.length });
     if (error) { showToast('Error al agregar: ' + error.message); return; }
 
     input.value = '';
-    const { data } = await supabase.from('quick_pendings').select('*').order('created_at', { ascending: true });
+    const { data } = await db.from('quick_pendings').select('*').order('created_at', { ascending: true });
     state.quickPendings = data || [];
     renderQuickList();
   });
@@ -544,7 +544,7 @@ function renderQuickList() {
       const item = state.quickPendings.find(q => q.id === id);
       item.done = e.target.checked;
       renderQuickList();
-      await supabase.from('quick_pendings').update({ done: item.done }).eq('id', id);
+      await db.from('quick_pendings').update({ done: item.done }).eq('id', id);
     });
   });
   list.querySelectorAll('[data-action="remove"]').forEach(el => {
@@ -552,7 +552,7 @@ function renderQuickList() {
       const id = e.target.closest('.quick-item').dataset.id;
       state.quickPendings = state.quickPendings.filter(q => q.id !== id);
       renderQuickList();
-      await supabase.from('quick_pendings').delete().eq('id', id);
+      await db.from('quick_pendings').delete().eq('id', id);
     });
   });
 }
