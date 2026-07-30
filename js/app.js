@@ -12,9 +12,21 @@ const STATUSES = [
 const VERTIENTE_LABELS = {
   shore_content: 'SHORE Content',
   pm_video: 'PM · Shore Video',
+  produccion_video: 'Producción · Shore Video',
 };
 
-const AREAS = ['Brand', 'MKT', 'Comercial', 'Dirección', 'Administración', 'Culture & People', 'Producción', 'Postproducción', 'Cliente'];
+const AREA_PALETTE = [
+  '#c77dff', '#4fb4e8', '#4caf7d', '#e8a33d', '#9298a6',
+  '#f2789f', '#f2a65a', '#6c8ef5', '#e14f4f', '#3ecf8e',
+  '#d68fd6', '#8fa8d6', '#d6c48f', '#8fd6c4',
+];
+function getAreaColor(name) {
+  const idx = state.areas.findIndex(a => a.name === name);
+  return AREA_PALETTE[(idx >= 0 ? idx : 0) % AREA_PALETTE.length];
+}
+
+const WEEKDAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const NTH_NAMES = { 1: '1ra', 2: '2da', 3: '3ra', 4: '4ta', 5: '5ta' };
 
 let db = null;
 let state = {
@@ -22,7 +34,13 @@ let state = {
   subtasks: [],       // all subtasks, filtered by task_id when needed
   quickPendings: [],
   dailyTasks: [],
-  view: 'todo',        // 'todo' | 'shore_content' | 'pm_video'
+  areas: [],
+  recurringTasks: [],
+  recurringCompletions: [],
+  section: 'board',    // 'board' | 'recurring' | 'archive'
+  calendarDate: new Date(),   // mes que se está viendo en el calendario
+  selectedDay: null,           // 'YYYY-MM-DD' seleccionado en el calendario
+  view: 'todo',        // 'todo' | 'shore_content' | 'pm_video' | 'produccion_video'
   filters: { area: '', priority: '', blockedOnly: false },
   editingSubtasks: [],  // working copy of subtasks while modal is open
   editingTaskId: null,
@@ -49,10 +67,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   setupLoginForm();
   setupTopbar();
+  setupSectionTabs();
   setupFilterbar();
   setupQuickPanel();
   setupModal();
+  setupAreasModal();
   setupDailySection();
+  setupRecurringSection();
   watchForDayChange();
 });
 
@@ -114,11 +135,14 @@ async function enterApp() {
 // Data loading
 // ============================================================
 async function loadAll() {
-  const [tasksRes, subtasksRes, quickRes, dailyRes] = await Promise.all([
+  const [tasksRes, subtasksRes, quickRes, dailyRes, areasRes, recurringRes, completionsRes] = await Promise.all([
     db.from('tasks').select('*').order('position', { ascending: true }),
     db.from('subtasks').select('*').order('position', { ascending: true }),
     db.from('quick_pendings').select('*').order('created_at', { ascending: true }),
     db.from('daily_tasks').select('*').order('position', { ascending: true }),
+    db.from('areas').select('*').order('position', { ascending: true }),
+    db.from('recurring_tasks').select('*').order('created_at', { ascending: true }),
+    db.from('recurring_completions').select('*'),
   ]);
 
   if (tasksRes.error) { showToast('Error cargando tareas: ' + tasksRes.error.message); return; }
@@ -127,16 +151,69 @@ async function loadAll() {
   state.subtasks = subtasksRes.data || [];
   state.quickPendings = quickRes.data || [];
   state.dailyTasks = dailyRes.data || [];
+  state.areas = areasRes.data || [];
+  state.recurringTasks = recurringRes.data || [];
+  state.recurringCompletions = completionsRes.data || [];
+
+  await runAutoArchiveIfNeeded();
 
   populateAreaFilter();
   renderBoard();
   renderQuickList();
   renderDailySection();
+  renderRecurringRulesList();
+  renderCalendar();
+}
+
+// ============================================================
+// Archivado automático (cada viernes 11:59 PM)
+// ============================================================
+function mostRecentFridayBoundary(now) {
+  const d = new Date(now);
+  const day = d.getDay(); // 0=domingo ... 5=viernes ... 6=sábado
+  const diff = (day - 5 + 7) % 7;
+  const friday = new Date(d);
+  friday.setDate(d.getDate() - diff);
+  friday.setHours(23, 59, 0, 0);
+  if (friday > now) friday.setDate(friday.getDate() - 7);
+  return friday;
+}
+
+async function runAutoArchiveIfNeeded() {
+  const now = new Date();
+  const boundary = mostRecentFridayBoundary(now);
+
+  const { data: settingRow } = await db.from('app_settings').select('value').eq('key', 'last_archive_run').maybeSingle();
+  const lastRun = settingRow && settingRow.value ? new Date(settingRow.value) : null;
+
+  if (lastRun && lastRun >= boundary) return; // ya se archivó para esta semana
+
+  const toArchive = state.tasks.filter(t => t.status === 'completado' && !t.archived);
+
+  if (toArchive.length > 0) {
+    const ids = toArchive.map(t => t.id);
+    const { error } = await db.from('tasks').update({ archived: true, archived_at: now.toISOString() }).in('id', ids);
+    if (!error) {
+      toArchive.forEach(t => { t.archived = true; t.archived_at = now.toISOString(); });
+    }
+  }
+
+  await db.from('app_settings').upsert({ key: 'last_archive_run', value: now.toISOString() });
 }
 
 function populateAreaFilter() {
   const sel = document.getElementById('filter-area');
-  sel.innerHTML = '<option value="">Todas</option>' + AREAS.map(a => `<option value="${a}">${a}</option>`).join('');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">Todas</option>' + state.areas.map(a => `<option value="${escapeHtml(a.name)}">${escapeHtml(a.name)}</option>`).join('');
+  if (state.areas.some(a => a.name === current)) sel.value = current;
+}
+
+function populateTaskAreaSelect(selectedValue) {
+  const sel = document.getElementById('task-area');
+  const options = state.areas.map(a => `<option value="${escapeHtml(a.name)}">${escapeHtml(a.name)}</option>`).join('');
+  sel.innerHTML = '<option value="">Nadie / no aplica</option>' + options + '<option value="__manage__">⚙️ Administrar opciones…</option>';
+  sel.value = selectedValue || '';
+  sel.dataset.previousValue = selectedValue || '';
 }
 
 // ============================================================
@@ -153,6 +230,26 @@ function setupTopbar() {
   });
 
   document.getElementById('new-task-btn').addEventListener('click', () => openTaskModal(null));
+}
+
+function setupSectionTabs() {
+  document.querySelectorAll('.section-tab').forEach(btn => {
+    btn.addEventListener('click', () => setSection(btn.dataset.section));
+  });
+}
+
+function setSection(section) {
+  state.section = section;
+
+  document.querySelectorAll('.section-tab').forEach(b => b.classList.toggle('active', b.dataset.section === section));
+
+  document.getElementById('board-section').hidden = section !== 'board';
+  document.getElementById('view-tabs').hidden = section !== 'board';
+  document.getElementById('recurring-wrap').hidden = section !== 'recurring';
+  document.getElementById('archive-wrap').hidden = section !== 'archive';
+
+  if (section === 'recurring') { renderRecurringRulesList(); renderCalendar(); }
+  if (section === 'archive') { renderArchiveView(); }
 }
 
 // ============================================================
@@ -210,6 +307,7 @@ function isTaskBlocked(task) {
 
 function getVisibleTasks() {
   return state.tasks.filter(t => {
+    if (t.archived) return false;
     if (state.view !== 'todo' && t.vertiente !== state.view) return false;
     if (state.filters.area && t.area !== state.filters.area) return false;
     if (state.filters.priority && t.priority !== state.filters.priority) return false;
@@ -248,11 +346,16 @@ function renderCard(task) {
   const blocked = isTaskBlocked(task);
   const depTask = task.depends_on_task_id ? state.tasks.find(t => t.id === task.depends_on_task_id) : null;
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const overdue = task.due_date && task.due_date < today && task.status !== 'completado';
+  const dueToday = task.due_date === today && task.status !== 'completado';
+
+  const areaTag = task.area
+    ? `<span class="tag tag-area" style="background:${getAreaColor(task.area)}">${escapeHtml(task.area)}</span>`
+    : '';
 
   return `
-    <div class="card ${blocked ? 'blocked' : ''}" draggable="true" data-id="${task.id}" data-vertiente="${task.vertiente}">
+    <div class="card ${blocked ? 'blocked' : ''} ${dueToday ? 'due-today' : ''}" draggable="true" data-id="${task.id}" data-vertiente="${task.vertiente}">
       <div class="card-top">
         <div class="card-title">${escapeHtml(task.title)}</div>
         <div class="priority-dot ${task.priority}"></div>
@@ -265,9 +368,9 @@ function renderCard(task) {
         </div>` : ''}
       <div class="card-tags">
         ${state.view === 'todo' ? `<span class="tag tag-vertiente-${task.vertiente}">${VERTIENTE_LABELS[task.vertiente]}</span>` : ''}
-        ${task.area ? `<span class="tag tag-area" data-area="${task.area}">${task.area}</span>` : ''}
+        ${areaTag}
         ${blocked ? `<span class="tag tag-blocked">🔒 ${escapeHtml(depTask ? depTask.title : 'Tarea previa')}</span>` : ''}
-        ${task.due_date ? `<span class="tag tag-due ${overdue ? 'overdue' : ''}">${formatDate(task.due_date)}</span>` : ''}
+        ${task.due_date ? `<span class="tag tag-due ${overdue ? 'overdue' : ''} ${dueToday ? 'today' : ''}">${dueToday ? 'Hoy' : formatDate(task.due_date)}</span>` : ''}
       </div>
     </div>
   `;
@@ -337,6 +440,16 @@ function setupModal() {
     if (e.key === 'Enter') { e.preventDefault(); addSubtaskToEditingList(); }
   });
 
+  document.getElementById('task-area').addEventListener('change', (e) => {
+    if (e.target.value === '__manage__') {
+      const previous = e.target.dataset.previousValue || '';
+      e.target.value = previous;
+      openAreasModal();
+    } else {
+      e.target.dataset.previousValue = e.target.value;
+    }
+  });
+
   document.getElementById('task-form').addEventListener('submit', onSaveTask);
   document.getElementById('delete-task-btn').addEventListener('click', onDeleteTask);
 }
@@ -360,7 +473,7 @@ function openTaskModal(taskId) {
     document.getElementById('task-status').value = task.status;
     document.getElementById('task-priority').value = task.priority;
     document.getElementById('task-due').value = task.due_date || '';
-    document.getElementById('task-area').value = task.area || '';
+    populateTaskAreaSelect(task.area);
     document.getElementById('task-depends-on').value = task.depends_on_task_id || '';
     document.getElementById('task-description').value = task.description || '';
     document.getElementById('task-notes').value = task.notes || '';
@@ -373,6 +486,7 @@ function openTaskModal(taskId) {
     deleteBtn.hidden = true;
     document.getElementById('task-id').value = '';
     document.getElementById('task-vertiente').value = state.view !== 'todo' ? state.view : 'shore_content';
+    populateTaskAreaSelect('');
     state.editingSubtasks = [];
   }
 
@@ -696,6 +810,317 @@ async function onDeleteDaily(id) {
   renderDailySection();
   const { error } = await db.from('daily_tasks').delete().eq('id', id);
   if (error) showToast('No se pudo eliminar: ' + error.message);
+}
+
+// ============================================================
+// Modal de administrar áreas
+// ============================================================
+function setupAreasModal() {
+  document.getElementById('close-areas-modal').addEventListener('click', closeAreasModal);
+  document.getElementById('areas-modal-backdrop').addEventListener('click', (e) => {
+    if (e.target.id === 'areas-modal-backdrop') closeAreasModal();
+  });
+  document.getElementById('area-add-btn').addEventListener('click', addArea);
+  document.getElementById('area-add-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); addArea(); }
+  });
+}
+
+function openAreasModal() {
+  renderAreasManageList();
+  document.getElementById('areas-modal-backdrop').hidden = false;
+}
+function closeAreasModal() {
+  document.getElementById('areas-modal-backdrop').hidden = true;
+  // Refresca el select de la tarea abierta (si sigue abierto detrás) con la lista actualizada
+  const taskModalOpen = !document.getElementById('task-modal-backdrop').hidden;
+  if (taskModalOpen) {
+    const current = document.getElementById('task-area').dataset.previousValue || '';
+    populateTaskAreaSelect(current);
+  }
+  populateAreaFilter();
+}
+
+function renderAreasManageList() {
+  const list = document.getElementById('areas-manage-list');
+  if (state.areas.length === 0) {
+    list.innerHTML = '<li class="recurring-empty">Aún no tienes áreas. Agrega una abajo.</li>';
+    return;
+  }
+  list.innerHTML = state.areas.map(a => `
+    <li class="subtask-item" data-id="${a.id}">
+      <span style="width:10px;height:10px;border-radius:50%;background:${getAreaColor(a.name)};flex-shrink:0;"></span>
+      <span>${escapeHtml(a.name)}</span>
+      <button type="button" data-action="remove-area" aria-label="Eliminar">✕</button>
+    </li>
+  `).join('');
+
+  list.querySelectorAll('[data-action="remove-area"]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const id = e.target.closest('li').dataset.id;
+      if (!confirm('¿Eliminar esta área? Las tareas que ya la tengan asignada la conservarán como texto.')) return;
+      state.areas = state.areas.filter(a => a.id !== id);
+      renderAreasManageList();
+      const { error } = await db.from('areas').delete().eq('id', id);
+      if (error) showToast('No se pudo eliminar: ' + error.message);
+    });
+  });
+}
+
+async function addArea() {
+  const input = document.getElementById('area-add-input');
+  const name = input.value.trim();
+  if (!name) return;
+
+  if (state.areas.some(a => a.name.toLowerCase() === name.toLowerCase())) {
+    showToast('Esa área ya existe.');
+    return;
+  }
+
+  const { data, error } = await db.from('areas').insert({ name, position: state.areas.length }).select().single();
+  if (error) { showToast('No se pudo agregar: ' + error.message); return; }
+
+  state.areas.push(data);
+  input.value = '';
+  renderAreasManageList();
+}
+
+// ============================================================
+// Archivo
+// ============================================================
+function renderArchiveView() {
+  const list = document.getElementById('archive-list');
+  const archived = state.tasks
+    .filter(t => t.archived)
+    .sort((a, b) => new Date(b.archived_at || 0) - new Date(a.archived_at || 0));
+
+  if (archived.length === 0) {
+    list.innerHTML = '<div class="archive-empty">Todavía no hay tareas archivadas. Se archivan solas cada viernes a las 11:59 PM.</div>';
+    return;
+  }
+
+  list.innerHTML = archived.map(t => `
+    <div class="archive-item" data-id="${t.id}">
+      <div>
+        <div class="archive-item-title">${escapeHtml(t.title)}</div>
+        <div class="archive-item-meta">${VERTIENTE_LABELS[t.vertiente]} · Archivada el ${t.archived_at ? formatDateLong(t.archived_at) : '—'}</div>
+      </div>
+      <button type="button" class="btn btn-ghost" data-action="restore">Restaurar</button>
+    </div>
+  `).join('');
+
+  list.querySelectorAll('[data-action="restore"]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const id = e.target.closest('.archive-item').dataset.id;
+      const task = state.tasks.find(t => t.id === id);
+      task.archived = false;
+      renderArchiveView();
+      const { error } = await db.from('tasks').update({ archived: false }).eq('id', id);
+      if (error) { showToast('No se pudo restaurar: ' + error.message); return; }
+      showToast('Tarea restaurada al tablero.');
+    });
+  });
+}
+
+function formatDateLong(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+// ============================================================
+// Tareas recurrentes + calendario
+// ============================================================
+function setupRecurringSection() {
+  document.getElementById('recurring-pattern-type').addEventListener('change', (e) => {
+    document.getElementById('recurring-nth-field').hidden = e.target.value !== 'monthly_nth';
+  });
+
+  document.getElementById('recurring-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const title = document.getElementById('recurring-title').value.trim();
+    const patternType = document.getElementById('recurring-pattern-type').value;
+    const weekday = parseInt(document.getElementById('recurring-weekday').value, 10);
+    let nthOccurrences = null;
+
+    if (patternType === 'monthly_nth') {
+      nthOccurrences = Array.from(document.querySelectorAll('.nth-check:checked')).map(c => parseInt(c.value, 10));
+      if (nthOccurrences.length === 0) { showToast('Elige al menos una semana del mes.'); return; }
+    }
+
+    const { data, error } = await db.from('recurring_tasks')
+      .insert({ title, pattern_type: patternType, weekday, nth_occurrences: nthOccurrences })
+      .select().single();
+
+    if (error) { showToast('Error al crear: ' + error.message); return; }
+
+    state.recurringTasks.push(data);
+    e.target.reset();
+    document.getElementById('recurring-nth-field').hidden = true;
+    renderRecurringRulesList();
+    renderCalendar();
+    showToast('Tarea recurrente creada.');
+  });
+
+  document.getElementById('cal-prev').addEventListener('click', () => {
+    state.calendarDate.setMonth(state.calendarDate.getMonth() - 1);
+    renderCalendar();
+  });
+  document.getElementById('cal-next').addEventListener('click', () => {
+    state.calendarDate.setMonth(state.calendarDate.getMonth() + 1);
+    renderCalendar();
+  });
+}
+
+function describeRecurrence(rule) {
+  const dayName = WEEKDAY_NAMES[rule.weekday];
+  if (rule.pattern_type === 'weekly') return `Cada ${dayName.toLowerCase()}`;
+  const nths = (rule.nth_occurrences || []).map(n => NTH_NAMES[n]).join(' y ');
+  return `${nths} ${dayName.toLowerCase()} de cada mes`;
+}
+
+function renderRecurringRulesList() {
+  const list = document.getElementById('recurring-rules-list');
+  if (state.recurringTasks.length === 0) {
+    list.innerHTML = '<li class="recurring-empty">Aún no tienes tareas recurrentes.</li>';
+    return;
+  }
+  list.innerHTML = state.recurringTasks.map(r => `
+    <li class="recurring-rule-item" data-id="${r.id}">
+      <div>
+        <div class="recurring-rule-title">${escapeHtml(r.title)}</div>
+        <div class="recurring-rule-desc">${describeRecurrence(r)}</div>
+      </div>
+      <button type="button" data-action="delete-recurring" aria-label="Eliminar">✕</button>
+    </li>
+  `).join('');
+
+  list.querySelectorAll('[data-action="delete-recurring"]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const id = e.target.closest('.recurring-rule-item').dataset.id;
+      if (!confirm('¿Eliminar esta tarea recurrente? También se borrará su historial de checks.')) return;
+      state.recurringTasks = state.recurringTasks.filter(r => r.id !== id);
+      renderRecurringRulesList();
+      renderCalendar();
+      const { error } = await db.from('recurring_tasks').delete().eq('id', id);
+      if (error) showToast('No se pudo eliminar: ' + error.message);
+    });
+  });
+}
+
+// Devuelve true si `rule` ocurre en la fecha dada (objeto Date)
+function ruleOccursOn(rule, date) {
+  if (date.getDay() !== rule.weekday) return false;
+  if (rule.pattern_type === 'weekly') return true;
+  const nthOfMonth = Math.ceil(date.getDate() / 7);
+  return (rule.nth_occurrences || []).includes(nthOfMonth);
+}
+
+function dateToISO(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function renderCalendar() {
+  const year = state.calendarDate.getFullYear();
+  const month = state.calendarDate.getMonth();
+
+  const label = state.calendarDate.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
+  document.getElementById('calendar-month-label').textContent = label;
+
+  const firstDay = new Date(year, month, 1);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const startWeekday = firstDay.getDay();
+  const today = todayISO();
+
+  let cells = '';
+  for (let i = 0; i < startWeekday; i++) cells += `<div class="calendar-day empty"></div>`;
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = new Date(year, month, day);
+    const iso = dateToISO(date);
+    const occurring = state.recurringTasks.filter(r => ruleOccursOn(r, date));
+    const isToday = iso === today;
+    const isSelected = iso === state.selectedDay;
+
+    const dots = occurring.map(r => {
+      const completion = state.recurringCompletions.find(c => c.recurring_task_id === r.id && c.occurrence_date === iso);
+      const color = AREA_PALETTE[state.recurringTasks.indexOf(r) % AREA_PALETTE.length];
+      return `<span class="calendar-day-dot ${completion && completion.done ? 'done' : ''}" style="background:${color}"></span>`;
+    }).join('');
+
+    cells += `
+      <div class="calendar-day ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''}" data-date="${iso}">
+        <span class="calendar-day-num">${day}</span>
+        <div class="calendar-day-dots">${dots}</div>
+      </div>
+    `;
+  }
+
+  document.getElementById('calendar-grid').innerHTML = cells;
+
+  document.querySelectorAll('.calendar-day[data-date]').forEach(el => {
+    el.addEventListener('click', () => {
+      state.selectedDay = el.dataset.date;
+      renderCalendar();
+      renderCalendarDayPanel();
+    });
+  });
+
+  if (!state.selectedDay) state.selectedDay = today;
+  renderCalendarDayPanel();
+}
+
+function renderCalendarDayPanel() {
+  const panel = document.getElementById('calendar-day-panel');
+  if (!state.selectedDay) { panel.innerHTML = ''; return; }
+
+  const date = new Date(state.selectedDay + 'T00:00:00');
+  const occurring = state.recurringTasks.filter(r => ruleOccursOn(r, date));
+  const label = date.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  if (occurring.length === 0) {
+    panel.innerHTML = `<h3>${label}</h3><div class="calendar-day-panel-empty">No hay tareas recurrentes este día.</div>`;
+    return;
+  }
+
+  const itemsHtml = occurring.map(r => {
+    const completion = state.recurringCompletions.find(c => c.recurring_task_id === r.id && c.occurrence_date === state.selectedDay);
+    const done = completion ? completion.done : false;
+    return `
+      <li class="calendar-day-task ${done ? 'done' : ''}" data-rule-id="${r.id}">
+        <input type="checkbox" ${done ? 'checked' : ''}>
+        <span>${escapeHtml(r.title)}</span>
+      </li>
+    `;
+  }).join('');
+
+  panel.innerHTML = `<h3>${label}</h3><ul class="calendar-day-tasks">${itemsHtml}</ul>`;
+
+  panel.querySelectorAll('.calendar-day-task input').forEach(input => {
+    input.addEventListener('change', (e) => {
+      const ruleId = e.target.closest('.calendar-day-task').dataset.ruleId;
+      toggleRecurringCompletion(ruleId, state.selectedDay, e.target.checked);
+    });
+  });
+}
+
+async function toggleRecurringCompletion(ruleId, dateISO, done) {
+  const existing = state.recurringCompletions.find(c => c.recurring_task_id === ruleId && c.occurrence_date === dateISO);
+
+  if (existing) {
+    existing.done = done;
+    renderCalendarDayPanel();
+    renderCalendar();
+    const { error } = await db.from('recurring_completions').update({ done }).eq('id', existing.id);
+    if (error) showToast('No se pudo guardar: ' + error.message);
+  } else {
+    const { data, error } = await db.from('recurring_completions')
+      .insert({ recurring_task_id: ruleId, occurrence_date: dateISO, done })
+      .select().single();
+    if (error) { showToast('No se pudo guardar: ' + error.message); return; }
+    state.recurringCompletions.push(data);
+    renderCalendarDayPanel();
+    renderCalendar();
+  }
 }
 
 // ============================================================
