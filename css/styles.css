@@ -277,6 +277,88 @@ textarea { resize: vertical; font-family: inherit; }
 .filter-toggle input { accent-color: var(--accent); }
 
 /* ============================================================
+   Daily routine section
+   ============================================================ */
+.daily-section {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--surface);
+}
+.daily-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.daily-header h2 {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.daily-add-form { display: flex; gap: 8px; }
+.daily-add-form input { width: 220px; padding: 7px 10px; font-size: 13px; }
+.daily-add-form button { padding: 7px 14px; font-size: 12px; }
+
+.daily-list { display: flex; flex-wrap: wrap; gap: 10px; }
+.daily-empty { color: var(--text-faint); font-size: 13px; padding: 6px 2px; }
+
+.daily-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 9px 12px;
+  min-width: 200px;
+}
+.daily-item.checked-today { border-color: var(--success); background: var(--success-soft); }
+.daily-item.warning { border-color: var(--danger); background: var(--danger-soft); }
+
+.daily-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--success);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.daily-item-body { flex: 1; min-width: 0; }
+.daily-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.daily-item.checked-today .daily-item-title { color: var(--text-dim); }
+.daily-item-meta {
+  display: flex;
+  gap: 8px;
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.daily-item.warning .daily-item-meta { color: var(--danger); }
+.daily-item-delete {
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.daily-item-delete:hover { color: var(--danger); }
+
+/* ============================================================
    Board
    ============================================================ */
 .board-wrap { flex: 1; overflow-x: auto; padding: 20px 24px 40px; }
