@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Generar hash de contraseña</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 480px; margin: 60px auto; padding: 0 20px; background: #12141a; color: #edeef2; }
+  h1 { font-size: 18px; }
+  input { width: 100%; padding: 10px; margin: 10px 0; background: #1b1e27; border: 1px solid #2e323d; color: #edeef2; border-radius: 6px; box-sizing: border-box; }
+  button { padding: 10px 16px; background: #e8a33d; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; }
+  code { display: block; background: #1b1e27; padding: 14px; margin-top: 16px; border-radius: 6px; word-break: break-all; border: 1px solid #2e323d; }
+  p { color: #9298a6; font-size: 14px; }
+</style>
+</head>
+<body>
+  <h1>Generador de hash para tu contraseña</h1>
+  <p>Escribe la contraseña que quieres usar para entrar al tablero. Copia el hash resultante y pégalo en <code>supabase/schema.sql</code> (o directamente en la tabla <code>app_auth</code> desde Supabase). Este archivo es solo una herramienta local, no lo subas a producción si no quieres.</p>
+  <input type="text" id="pwd" placeholder="Tu contraseña">
+  <button onclick="run()">Generar hash</button>
+  <code id="out">Aquí aparecerá el hash…</code>
+
+  <script>
+    async function run() {
+      const pwd = document.getElementById('pwd').value;
+      const enc = new TextEncoder().encode(pwd);
+      const buf = await crypto.subtle.digest('SHA-256', enc);
+      const hex = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+      document.getElementById('out').textContent = hex;
+    }
+  </script>
+</body>
+</html>

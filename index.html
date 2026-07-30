@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SHORE · Tablero</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<!-- ============ PANTALLA DE ACCESO ============ -->
+<div id="login-screen" class="login-screen">
+  <div class="login-card">
+    <div class="login-mark">
+      <span class="rec-dot"></span>
+      <span class="login-mark-text">SHORE</span>
+    </div>
+    <h1>Tablero de tareas</h1>
+    <p class="login-sub">Ingresa la contraseña para continuar.</p>
+    <form id="login-form">
+      <input type="password" id="login-password" placeholder="Contraseña" autocomplete="current-password" required>
+      <button type="submit">Entrar</button>
+    </form>
+    <p id="login-error" class="login-error" hidden>Contraseña incorrecta. Intenta de nuevo.</p>
+    <p id="login-config-warning" class="login-error" hidden>Falta configurar la conexión a Supabase en <code>js/config.js</code>.</p>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="app" class="app" hidden>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="rec-dot"></span>
+      <span class="brand-name">SHORE</span>
+      <span class="brand-sep">/</span>
+      <span class="brand-sub">Tablero</span>
+    </div>
+
+    <nav class="view-tabs" id="view-tabs">
+      <button class="view-tab active" data-view="todo">Todo</button>
+      <button class="view-tab" data-view="shore_content">SHORE Content</button>
+      <button class="view-tab" data-view="pm_video">PM · Shore Video</button>
+    </nav>
+
+    <div class="topbar-actions">
+      <button class="btn btn-ghost" id="toggle-quick-panel">Pendientes rápidos</button>
+      <button class="btn btn-primary" id="new-task-btn">+ Nueva tarea</button>
+    </div>
+  </header>
+
+  <div class="filterbar" id="filterbar">
+    <div class="filter-group">
+      <label>Área</label>
+      <select id="filter-area">
+        <option value="">Todas</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Prioridad</label>
+      <select id="filter-priority">
+        <option value="">Todas</option>
+        <option value="urgente">Urgente</option>
+        <option value="prioritaria">Prioritaria</option>
+        <option value="normal">Normal</option>
+      </select>
+    </div>
+    <label class="filter-toggle">
+      <input type="checkbox" id="filter-blocked">
+      <span>Solo bloqueadas</span>
+    </label>
+    <button class="btn btn-text" id="clear-filters">Limpiar filtros</button>
+  </div>
+
+  <main class="board-wrap">
+    <div class="board" id="board">
+      <!-- Las columnas se generan dinámicamente por JS -->
+    </div>
+  </main>
+
+  <!-- ============ PANEL DE PENDIENTES RÁPIDOS ============ -->
+  <aside class="quick-panel" id="quick-panel">
+    <div class="quick-panel-header">
+      <h2>Pendientes rápidos</h2>
+      <button class="icon-btn" id="close-quick-panel" aria-label="Cerrar">✕</button>
+    </div>
+    <form id="quick-add-form" class="quick-add-form">
+      <input type="text" id="quick-add-input" placeholder="Escribe un pendiente y presiona Enter…" required>
+    </form>
+    <ul class="quick-list" id="quick-list"></ul>
+  </aside>
+  <div class="quick-panel-backdrop" id="quick-panel-backdrop" hidden></div>
+
+</div>
+
+<!-- ============ MODAL DE TAREA ============ -->
+<div class="modal-backdrop" id="task-modal-backdrop" hidden>
+  <div class="modal" id="task-modal">
+    <div class="modal-header">
+      <h2 id="modal-title">Nueva tarea</h2>
+      <button class="icon-btn" id="close-modal" aria-label="Cerrar">✕</button>
+    </div>
+
+    <form id="task-form" class="task-form">
+      <input type="hidden" id="task-id">
+
+      <div class="field">
+        <label for="task-title">Título</label>
+        <input type="text" id="task-title" required placeholder="Ej. Editar reel campaña verano">
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="task-vertiente">Vertiente</label>
+          <select id="task-vertiente" required>
+            <option value="shore_content">SHORE Content</option>
+            <option value="pm_video">Project Management · Shore Video</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="task-status">Estatus</label>
+          <select id="task-status" required>
+            <option value="pendiente">Pendiente</option>
+            <option value="en_proceso">En proceso</option>
+            <option value="en_revision">En revisión</option>
+            <option value="completado">Completado</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="task-priority">Prioridad</label>
+          <select id="task-priority">
+            <option value="normal">Normal</option>
+            <option value="prioritaria">Prioritaria</option>
+            <option value="urgente">Urgente</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="task-due">Fecha límite (opcional)</label>
+          <input type="date" id="task-due">
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="task-area">Depende de (área o cliente)</label>
+          <select id="task-area">
+            <option value="">Nadie / no aplica</option>
+            <option value="Brand">Brand</option>
+            <option value="MKT">MKT</option>
+            <option value="Comercial">Comercial</option>
+            <option value="Dirección">Dirección</option>
+            <option value="Administración">Administración</option>
+            <option value="Culture & People">Culture & People</option>
+            <option value="Producción">Producción</option>
+            <option value="Postproducción">Postproducción</option>
+            <option value="Cliente">Cliente</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="task-depends-on">Depende de otra tarea</label>
+          <select id="task-depends-on">
+            <option value="">Ninguna</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="task-description">Descripción</label>
+        <textarea id="task-description" rows="3" placeholder="Detalle de la tarea…"></textarea>
+      </div>
+
+      <div class="field">
+        <label for="task-notes">Notas breves</label>
+        <textarea id="task-notes" rows="2" placeholder="Apuntes rápidos: cambios, pendientes de aprobación, etc."></textarea>
+      </div>
+
+      <div class="field">
+        <div class="subtasks-header">
+          <label>Subtareas / proceso grande</label>
+          <span class="subtasks-progress" id="subtasks-progress"></span>
+        </div>
+        <ul class="subtasks-list" id="subtasks-list"></ul>
+        <div class="subtask-add-row">
+          <input type="text" id="subtask-add-input" placeholder="Agregar subtarea…">
+          <button type="button" class="btn btn-ghost" id="subtask-add-btn">Agregar</button>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-danger" id="delete-task-btn" hidden>Eliminar tarea</button>
+        <div class="modal-footer-right">
+          <button type="button" class="btn btn-ghost" id="cancel-task-btn">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
