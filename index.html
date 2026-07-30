@@ -1,4 +1,4 @@
-!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
- 
+
 <!-- ============ PANTALLA DE ACCESO ============ -->
 <div id="login-screen" class="login-screen">
   <div class="login-card">
@@ -28,10 +28,10 @@
     <p id="login-config-warning" class="login-error" hidden>Falta configurar la conexión a Supabase en <code>js/config.js</code>.</p>
   </div>
 </div>
- 
+
 <!-- ============ APP ============ -->
 <div id="app" class="app" hidden>
- 
+
   <header class="topbar">
     <div class="brand">
       <span class="rec-dot"></span>
@@ -39,59 +39,138 @@
       <span class="brand-sep">/</span>
       <span class="brand-sub">Tablero</span>
     </div>
- 
+
+    <nav class="section-tabs" id="section-tabs">
+      <button class="section-tab active" data-section="board">Tablero</button>
+      <button class="section-tab" data-section="recurring">📅 Recurrentes</button>
+      <button class="section-tab" data-section="archive">🗄 Archivo</button>
+    </nav>
+
     <nav class="view-tabs" id="view-tabs">
       <button class="view-tab active" data-view="todo">Todo</button>
       <button class="view-tab" data-view="shore_content">SHORE Content</button>
       <button class="view-tab" data-view="pm_video">PM · Shore Video</button>
+      <button class="view-tab" data-view="produccion_video">Producción · Shore Video</button>
     </nav>
- 
+
     <div class="topbar-actions">
       <button class="btn btn-ghost" id="toggle-quick-panel">Pendientes rápidos</button>
       <button class="btn btn-primary" id="new-task-btn">+ Nueva tarea</button>
     </div>
   </header>
- 
-  <div class="filterbar" id="filterbar">
-    <div class="filter-group">
-      <label>Área</label>
-      <select id="filter-area">
-        <option value="">Todas</option>
-      </select>
+
+  <div id="board-section">
+    <div class="filterbar" id="filterbar">
+      <div class="filter-group">
+        <label>Área</label>
+        <select id="filter-area">
+          <option value="">Todas</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Prioridad</label>
+        <select id="filter-priority">
+          <option value="">Todas</option>
+          <option value="urgente">Urgente</option>
+          <option value="prioritaria">Prioritaria</option>
+          <option value="normal">Normal</option>
+        </select>
+      </div>
+      <label class="filter-toggle">
+        <input type="checkbox" id="filter-blocked">
+        <span>Solo bloqueadas</span>
+      </label>
+      <button class="btn btn-text" id="clear-filters">Limpiar filtros</button>
     </div>
-    <div class="filter-group">
-      <label>Prioridad</label>
-      <select id="filter-priority">
-        <option value="">Todas</option>
-        <option value="urgente">Urgente</option>
-        <option value="prioritaria">Prioritaria</option>
-        <option value="normal">Normal</option>
-      </select>
-    </div>
-    <label class="filter-toggle">
-      <input type="checkbox" id="filter-blocked">
-      <span>Solo bloqueadas</span>
-    </label>
-    <button class="btn btn-text" id="clear-filters">Limpiar filtros</button>
+
+    <section class="daily-section" id="daily-section">
+      <div class="daily-header">
+        <h2><span class="rec-dot" style="animation:none;background:var(--accent)"></span> Rutina diaria</h2>
+        <form id="daily-add-form" class="daily-add-form">
+          <input type="text" id="daily-add-input" placeholder="Agregar tarea diaria…" required>
+          <button type="submit" class="btn btn-ghost">Agregar</button>
+        </form>
+      </div>
+      <div class="daily-list" id="daily-list"></div>
+    </section>
+
+    <main class="board-wrap">
+      <div class="board" id="board">
+        <!-- Las columnas se generan dinámicamente por JS -->
+      </div>
+    </main>
   </div>
- 
-  <section class="daily-section" id="daily-section">
-    <div class="daily-header">
-      <h2><span class="rec-dot" style="animation:none;background:var(--accent)"></span> Rutina diaria</h2>
-      <form id="daily-add-form" class="daily-add-form">
-        <input type="text" id="daily-add-input" placeholder="Agregar tarea diaria…" required>
-        <button type="submit" class="btn btn-ghost">Agregar</button>
-      </form>
+
+  <!-- ============ VISTA DE RECURRENTES ============ -->
+  <section class="recurring-wrap" id="recurring-wrap" hidden>
+    <div class="recurring-layout">
+      <div class="recurring-sidebar">
+        <h2 class="section-h">Nueva tarea recurrente</h2>
+        <form id="recurring-form" class="task-form">
+          <div class="field">
+            <label for="recurring-title">Título</label>
+            <input type="text" id="recurring-title" required placeholder="Ej. Reporte semanal">
+          </div>
+          <div class="field">
+            <label for="recurring-pattern-type">Frecuencia</label>
+            <select id="recurring-pattern-type">
+              <option value="weekly">Cada semana</option>
+              <option value="monthly_nth">Ciertas semanas del mes</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="recurring-weekday">Día de la semana</label>
+            <select id="recurring-weekday">
+              <option value="1">Lunes</option>
+              <option value="2">Martes</option>
+              <option value="3">Miércoles</option>
+              <option value="4">Jueves</option>
+              <option value="5">Viernes</option>
+              <option value="6">Sábado</option>
+              <option value="0">Domingo</option>
+            </select>
+          </div>
+          <div class="field" id="recurring-nth-field" hidden>
+            <label>¿Qué semana(s) del mes?</label>
+            <div class="nth-checks">
+              <label><input type="checkbox" class="nth-check" value="1"> 1ra</label>
+              <label><input type="checkbox" class="nth-check" value="2"> 2da</label>
+              <label><input type="checkbox" class="nth-check" value="3"> 3ra</label>
+              <label><input type="checkbox" class="nth-check" value="4"> 4ta</label>
+              <label><input type="checkbox" class="nth-check" value="5"> 5ta</label>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width:100%">Agregar</button>
+        </form>
+
+        <h2 class="section-h" style="margin-top:26px;">Tus recurrentes</h2>
+        <ul class="recurring-rules-list" id="recurring-rules-list"></ul>
+      </div>
+
+      <div class="recurring-main">
+        <div class="calendar-header">
+          <button type="button" class="icon-btn" id="cal-prev">←</button>
+          <h2 id="calendar-month-label"></h2>
+          <button type="button" class="icon-btn" id="cal-next">→</button>
+        </div>
+        <div class="calendar-weekdays">
+          <span>Dom</span><span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span>
+        </div>
+        <div class="calendar-grid" id="calendar-grid"></div>
+        <div class="calendar-day-panel" id="calendar-day-panel"></div>
+      </div>
     </div>
-    <div class="daily-list" id="daily-list"></div>
   </section>
- 
-  <main class="board-wrap">
-    <div class="board" id="board">
-      <!-- Las columnas se generan dinámicamente por JS -->
+
+  <!-- ============ VISTA DE ARCHIVO ============ -->
+  <section class="archive-wrap" id="archive-wrap" hidden>
+    <div class="archive-header">
+      <h2 class="section-h">Archivo</h2>
+      <p class="archive-sub">Tareas completadas se archivan automáticamente cada viernes a las 11:59 PM. Aquí no se borra nada.</p>
     </div>
-  </main>
- 
+    <div class="archive-list" id="archive-list"></div>
+  </section>
+
   <!-- ============ PANEL DE PENDIENTES RÁPIDOS ============ -->
   <aside class="quick-panel" id="quick-panel">
     <div class="quick-panel-header">
@@ -104,9 +183,9 @@
     <ul class="quick-list" id="quick-list"></ul>
   </aside>
   <div class="quick-panel-backdrop" id="quick-panel-backdrop" hidden></div>
- 
+
 </div>
- 
+
 <!-- ============ MODAL DE TAREA ============ -->
 <div class="modal-backdrop" id="task-modal-backdrop" hidden>
   <div class="modal" id="task-modal">
@@ -114,21 +193,22 @@
       <h2 id="modal-title">Nueva tarea</h2>
       <button class="icon-btn" id="close-modal" aria-label="Cerrar">✕</button>
     </div>
- 
+
     <form id="task-form" class="task-form">
       <input type="hidden" id="task-id">
- 
+
       <div class="field">
         <label for="task-title">Título</label>
         <input type="text" id="task-title" required placeholder="Ej. Editar reel campaña verano">
       </div>
- 
+
       <div class="field-row">
         <div class="field">
           <label for="task-vertiente">Vertiente</label>
           <select id="task-vertiente" required>
             <option value="shore_content">SHORE Content</option>
             <option value="pm_video">Project Management · Shore Video</option>
+            <option value="produccion_video">Producción · Shore Video</option>
           </select>
         </div>
         <div class="field">
@@ -141,7 +221,7 @@
           </select>
         </div>
       </div>
- 
+
       <div class="field-row">
         <div class="field">
           <label for="task-priority">Prioridad</label>
@@ -156,21 +236,12 @@
           <input type="date" id="task-due">
         </div>
       </div>
- 
+
       <div class="field-row">
         <div class="field">
           <label for="task-area">Depende de (área o cliente)</label>
           <select id="task-area">
             <option value="">Nadie / no aplica</option>
-            <option value="Brand">Brand</option>
-            <option value="MKT">MKT</option>
-            <option value="Comercial">Comercial</option>
-            <option value="Dirección">Dirección</option>
-            <option value="Administración">Administración</option>
-            <option value="Culture & People">Culture & People</option>
-            <option value="Producción">Producción</option>
-            <option value="Postproducción">Postproducción</option>
-            <option value="Cliente">Cliente</option>
           </select>
         </div>
         <div class="field">
@@ -180,17 +251,17 @@
           </select>
         </div>
       </div>
- 
+
       <div class="field">
         <label for="task-description">Descripción</label>
         <textarea id="task-description" rows="3" placeholder="Detalle de la tarea…"></textarea>
       </div>
- 
+
       <div class="field">
         <label for="task-notes">Notas breves</label>
         <textarea id="task-notes" rows="2" placeholder="Apuntes rápidos: cambios, pendientes de aprobación, etc."></textarea>
       </div>
- 
+
       <div class="field">
         <div class="subtasks-header">
           <label>Subtareas / proceso grande</label>
@@ -202,7 +273,7 @@
           <button type="button" class="btn btn-ghost" id="subtask-add-btn">Agregar</button>
         </div>
       </div>
- 
+
       <div class="modal-footer">
         <button type="button" class="btn btn-danger" id="delete-task-btn" hidden>Eliminar tarea</button>
         <div class="modal-footer-right">
@@ -213,9 +284,26 @@
     </form>
   </div>
 </div>
- 
+
+<!-- ============ MODAL DE ÁREAS ============ -->
+<div class="modal-backdrop" id="areas-modal-backdrop" hidden>
+  <div class="modal modal-sm" id="areas-modal">
+    <div class="modal-header">
+      <h2>Administrar áreas</h2>
+      <button class="icon-btn" id="close-areas-modal" aria-label="Cerrar">✕</button>
+    </div>
+    <div class="task-form">
+      <ul class="subtasks-list" id="areas-manage-list"></ul>
+      <div class="subtask-add-row">
+        <input type="text" id="area-add-input" placeholder="Nueva área o etiqueta…">
+        <button type="button" class="btn btn-ghost" id="area-add-btn">Agregar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast" hidden></div>
- 
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.js"></script>
 <script src="js/app.js"></script>
