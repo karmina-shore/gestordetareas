@@ -24,6 +24,7 @@
 
   --vert-content: #6c8ef5;
   --vert-video: #f2a65a;
+  --vert-prod: #7dd3a8;
 
   --font-display: 'Space Grotesk', sans-serif;
   --font-body: 'Inter', sans-serif;
@@ -219,6 +220,21 @@ textarea { resize: vertical; font-family: inherit; }
 }
 .brand-sep { color: var(--text-faint); }
 .brand-sub { color: var(--text-dim); font-size: 14px; }
+
+.section-tabs { display: flex; gap: 4px; }
+.section-tab {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.section-tab:hover { color: var(--text); border-color: var(--text-faint); }
+.section-tab.active { background: var(--accent); color: #1a1305; border-color: var(--accent); }
 
 .view-tabs {
   display: flex;
@@ -439,7 +455,14 @@ textarea { resize: vertical; font-family: inherit; }
 .card:hover { border-color: var(--text-faint); }
 .card.dragging { opacity: 0.4; }
 .card[data-vertiente="pm_video"] { border-left-color: var(--vert-video); }
+.card[data-vertiente="produccion_video"] { border-left-color: var(--vert-prod); }
 .card.blocked { opacity: 0.55; }
+.card.due-today {
+  border-top-color: var(--accent);
+  border-right-color: var(--accent);
+  border-bottom-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
 
 .card-top {
   display: flex;
@@ -480,10 +503,12 @@ textarea { resize: vertical; font-family: inherit; }
 }
 .tag-vertiente-shore_content { background: rgba(108, 142, 245, 0.16); color: var(--vert-content); }
 .tag-vertiente-pm_video { background: rgba(242, 166, 90, 0.16); color: var(--vert-video); }
+.tag-vertiente-produccion_video { background: rgba(125, 211, 168, 0.16); color: var(--vert-prod); }
 
 .tag-blocked { background: var(--danger-soft); color: var(--danger); display: inline-flex; align-items: center; gap: 4px; }
 .tag-due { font-family: var(--font-mono); background: var(--surface-3); color: var(--text-dim); }
 .tag-due.overdue { background: var(--danger-soft); color: var(--danger); }
+.tag-due.today { background: var(--accent-soft); color: var(--accent); }
 
 .card-progress {
   margin-top: 9px;
@@ -645,6 +670,114 @@ textarea { resize: vertical; font-family: inherit; }
 .modal-footer-right { display: flex; gap: 10px; margin-left: auto; }
 
 /* ============================================================
+   Section headers (shared)
+   ============================================================ */
+.section-h {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 12px;
+}
+.modal-sm { max-width: 420px; }
+.modal-sm .task-form { padding: 18px 22px 22px; }
+
+/* ============================================================
+   Recurrentes
+   ============================================================ */
+.recurring-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 20px;
+  padding: 20px 24px 40px;
+}
+.recurring-sidebar { background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius-lg); padding: 18px; }
+.recurring-sidebar .task-form { gap: 12px; }
+.nth-checks { display: flex; flex-wrap: wrap; gap: 10px; }
+.nth-checks label { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-dim); }
+.nth-checks input { accent-color: var(--accent); }
+
+.recurring-rules-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.recurring-rule-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 9px 10px;
+}
+.recurring-rule-title { font-size: 13px; font-weight: 600; }
+.recurring-rule-desc { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.recurring-rule-item button { background: transparent; border: none; color: var(--text-faint); cursor: pointer; flex-shrink: 0; }
+.recurring-rule-item button:hover { color: var(--danger); }
+.recurring-empty { color: var(--text-faint); font-size: 13px; }
+
+.recurring-main { background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius-lg); padding: 18px; }
+.calendar-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.calendar-header h2 { font-family: var(--font-display); font-size: 15px; margin: 0; text-transform: capitalize; }
+.calendar-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 11px; color: var(--text-faint); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+.calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+
+.calendar-day {
+  aspect-ratio: 1;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 6px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 56px;
+  background: var(--surface-2);
+}
+.calendar-day.empty { visibility: hidden; cursor: default; }
+.calendar-day:hover { border-color: var(--text-faint); }
+.calendar-day.today { border-color: var(--accent); }
+.calendar-day.selected { background: var(--accent-soft); border-color: var(--accent); }
+.calendar-day-num { font-family: var(--font-mono); font-size: 12px; color: var(--text-dim); }
+.calendar-day.today .calendar-day-num { color: var(--accent); font-weight: 700; }
+.calendar-day-dots { display: flex; flex-wrap: wrap; gap: 3px; }
+.calendar-day-dot { width: 6px; height: 6px; border-radius: 50%; }
+.calendar-day-dot.done { opacity: 0.35; }
+
+.calendar-day-panel {
+  margin-top: 18px;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 16px;
+}
+.calendar-day-panel h3 { font-family: var(--font-display); font-size: 13px; margin: 0 0 10px; text-transform: capitalize; color: var(--text-dim); }
+.calendar-day-tasks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.calendar-day-task { display: flex; align-items: center; gap: 10px; background: var(--surface-2); border: 1px solid var(--border-soft); border-radius: var(--radius-sm); padding: 8px 10px; }
+.calendar-day-task input { accent-color: var(--success); width: 17px; height: 17px; }
+.calendar-day-task span { font-size: 13px; }
+.calendar-day-task.done span { text-decoration: line-through; color: var(--text-faint); }
+.calendar-day-panel-empty { color: var(--text-faint); font-size: 13px; }
+
+/* ============================================================
+   Archivo
+   ============================================================ */
+.archive-header { padding: 20px 24px 0; }
+.archive-sub { color: var(--text-dim); font-size: 13px; margin: 4px 0 0; }
+.archive-list { padding: 16px 24px 40px; display: flex; flex-direction: column; gap: 10px; }
+.archive-empty { color: var(--text-faint); font-size: 13px; padding: 20px 0; }
+.archive-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  border-left: 3px solid var(--text-faint);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+.archive-item-title { font-size: 14px; font-weight: 600; }
+.archive-item-meta { font-size: 12px; color: var(--text-dim); margin-top: 3px; font-family: var(--font-mono); }
+
+/* ============================================================
    Toast
    ============================================================ */
 .toast {
@@ -673,4 +806,5 @@ textarea { resize: vertical; font-family: inherit; }
   .topbar-actions { margin-left: 0; }
   .field-row { grid-template-columns: 1fr; }
   .quick-panel { width: 100%; right: -100%; }
+  .recurring-layout { grid-template-columns: 1fr; padding: 16px; }
 }
