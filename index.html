@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-
+ 
 <!-- ============ PANTALLA DE ACCESO ============ -->
 <div id="login-screen" class="login-screen">
   <div class="login-card">
@@ -28,10 +28,10 @@
     <p id="login-config-warning" class="login-error" hidden>Falta configurar la conexión a Supabase en <code>js/config.js</code>.</p>
   </div>
 </div>
-
+ 
 <!-- ============ APP ============ -->
 <div id="app" class="app" hidden>
-
+ 
   <header class="topbar">
     <div class="brand">
       <span class="rec-dot"></span>
@@ -39,19 +39,19 @@
       <span class="brand-sep">/</span>
       <span class="brand-sub">Tablero</span>
     </div>
-
+ 
     <nav class="view-tabs" id="view-tabs">
       <button class="view-tab active" data-view="todo">Todo</button>
       <button class="view-tab" data-view="shore_content">SHORE Content</button>
       <button class="view-tab" data-view="pm_video">PM · Shore Video</button>
     </nav>
-
+ 
     <div class="topbar-actions">
       <button class="btn btn-ghost" id="toggle-quick-panel">Pendientes rápidos</button>
       <button class="btn btn-primary" id="new-task-btn">+ Nueva tarea</button>
     </div>
   </header>
-
+ 
   <div class="filterbar" id="filterbar">
     <div class="filter-group">
       <label>Área</label>
@@ -74,13 +74,24 @@
     </label>
     <button class="btn btn-text" id="clear-filters">Limpiar filtros</button>
   </div>
-
+ 
+  <section class="daily-section" id="daily-section">
+    <div class="daily-header">
+      <h2><span class="rec-dot" style="animation:none;background:var(--accent)"></span> Rutina diaria</h2>
+      <form id="daily-add-form" class="daily-add-form">
+        <input type="text" id="daily-add-input" placeholder="Agregar tarea diaria…" required>
+        <button type="submit" class="btn btn-ghost">Agregar</button>
+      </form>
+    </div>
+    <div class="daily-list" id="daily-list"></div>
+  </section>
+ 
   <main class="board-wrap">
     <div class="board" id="board">
       <!-- Las columnas se generan dinámicamente por JS -->
     </div>
   </main>
-
+ 
   <!-- ============ PANEL DE PENDIENTES RÁPIDOS ============ -->
   <aside class="quick-panel" id="quick-panel">
     <div class="quick-panel-header">
@@ -93,9 +104,9 @@
     <ul class="quick-list" id="quick-list"></ul>
   </aside>
   <div class="quick-panel-backdrop" id="quick-panel-backdrop" hidden></div>
-
+ 
 </div>
-
+ 
 <!-- ============ MODAL DE TAREA ============ -->
 <div class="modal-backdrop" id="task-modal-backdrop" hidden>
   <div class="modal" id="task-modal">
@@ -103,15 +114,15 @@
       <h2 id="modal-title">Nueva tarea</h2>
       <button class="icon-btn" id="close-modal" aria-label="Cerrar">✕</button>
     </div>
-
+ 
     <form id="task-form" class="task-form">
       <input type="hidden" id="task-id">
-
+ 
       <div class="field">
         <label for="task-title">Título</label>
         <input type="text" id="task-title" required placeholder="Ej. Editar reel campaña verano">
       </div>
-
+ 
       <div class="field-row">
         <div class="field">
           <label for="task-vertiente">Vertiente</label>
@@ -130,7 +141,7 @@
           </select>
         </div>
       </div>
-
+ 
       <div class="field-row">
         <div class="field">
           <label for="task-priority">Prioridad</label>
@@ -145,7 +156,7 @@
           <input type="date" id="task-due">
         </div>
       </div>
-
+ 
       <div class="field-row">
         <div class="field">
           <label for="task-area">Depende de (área o cliente)</label>
@@ -169,17 +180,17 @@
           </select>
         </div>
       </div>
-
+ 
       <div class="field">
         <label for="task-description">Descripción</label>
         <textarea id="task-description" rows="3" placeholder="Detalle de la tarea…"></textarea>
       </div>
-
+ 
       <div class="field">
         <label for="task-notes">Notas breves</label>
         <textarea id="task-notes" rows="2" placeholder="Apuntes rápidos: cambios, pendientes de aprobación, etc."></textarea>
       </div>
-
+ 
       <div class="field">
         <div class="subtasks-header">
           <label>Subtareas / proceso grande</label>
@@ -191,7 +202,7 @@
           <button type="button" class="btn btn-ghost" id="subtask-add-btn">Agregar</button>
         </div>
       </div>
-
+ 
       <div class="modal-footer">
         <button type="button" class="btn btn-danger" id="delete-task-btn" hidden>Eliminar tarea</button>
         <div class="modal-footer-right">
@@ -202,9 +213,9 @@
     </form>
   </div>
 </div>
-
+ 
 <div class="toast" id="toast" hidden></div>
-
+ 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.js"></script>
 <script src="js/app.js"></script>
