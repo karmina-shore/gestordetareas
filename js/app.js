@@ -21,6 +21,7 @@ let state = {
   tasks: [],
   subtasks: [],       // all subtasks, filtered by task_id when needed
   quickPendings: [],
+  dailyTasks: [],
   view: 'todo',        // 'todo' | 'shore_content' | 'pm_video'
   filters: { area: '', priority: '', blockedOnly: false },
   editingSubtasks: [],  // working copy of subtasks while modal is open
@@ -51,7 +52,23 @@ document.addEventListener('DOMContentLoaded', () => {
   setupFilterbar();
   setupQuickPanel();
   setupModal();
+  setupDailySection();
+  watchForDayChange();
 });
+
+// Revisa cada minuto si ya cambió el día (por si dejas la pestaña abierta
+// pasada la medianoche); si cambió, vuelve a pintar la rutina diaria para
+// que los checks se vean reiniciados sin necesidad de recargar la página.
+function watchForDayChange() {
+  let lastKnownDate = todayISO();
+  setInterval(() => {
+    const current = todayISO();
+    if (current !== lastKnownDate) {
+      lastKnownDate = current;
+      renderDailySection();
+    }
+  }, 60000);
+}
 
 // ============================================================
 // Auth
@@ -97,10 +114,11 @@ async function enterApp() {
 // Data loading
 // ============================================================
 async function loadAll() {
-  const [tasksRes, subtasksRes, quickRes] = await Promise.all([
+  const [tasksRes, subtasksRes, quickRes, dailyRes] = await Promise.all([
     db.from('tasks').select('*').order('position', { ascending: true }),
     db.from('subtasks').select('*').order('position', { ascending: true }),
     db.from('quick_pendings').select('*').order('created_at', { ascending: true }),
+    db.from('daily_tasks').select('*').order('position', { ascending: true }),
   ]);
 
   if (tasksRes.error) { showToast('Error cargando tareas: ' + tasksRes.error.message); return; }
@@ -108,10 +126,12 @@ async function loadAll() {
   state.tasks = tasksRes.data || [];
   state.subtasks = subtasksRes.data || [];
   state.quickPendings = quickRes.data || [];
+  state.dailyTasks = dailyRes.data || [];
 
   populateAreaFilter();
   renderBoard();
   renderQuickList();
+  renderDailySection();
 }
 
 function populateAreaFilter() {
@@ -555,6 +575,127 @@ function renderQuickList() {
       await db.from('quick_pendings').delete().eq('id', id);
     });
   });
+}
+
+// ============================================================
+// Rutina diaria
+// ============================================================
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function daysBetweenISO(fromISO, toISO) {
+  const from = new Date(fromISO + 'T00:00:00');
+  const to = new Date(toISO + 'T00:00:00');
+  return Math.round((to - from) / 86400000);
+}
+
+function yesterdayISO(fromTodayISO) {
+  const d = new Date(fromTodayISO + 'T00:00:00');
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+function setupDailySection() {
+  document.getElementById('daily-add-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = document.getElementById('daily-add-input');
+    const title = input.value.trim();
+    if (!title) return;
+
+    const { error } = await db.from('daily_tasks').insert({ title, position: state.dailyTasks.length });
+    if (error) { showToast('Error al agregar: ' + error.message); return; }
+
+    input.value = '';
+    const { data } = await db.from('daily_tasks').select('*').order('position', { ascending: true });
+    state.dailyTasks = data || [];
+    renderDailySection();
+  });
+}
+
+function renderDailySection() {
+  const list = document.getElementById('daily-list');
+  const today = todayISO();
+
+  if (state.dailyTasks.length === 0) {
+    list.innerHTML = '<div class="daily-empty">Agrega tus tareas de todos los días — se reinician automáticamente cada 24 horas.</div>';
+    return;
+  }
+
+  list.innerHTML = state.dailyTasks.map(dt => {
+    const checkedToday = dt.last_checked_date === today;
+    const daysSince = dt.last_checked_date ? daysBetweenISO(dt.last_checked_date, today) : null;
+    const warning = !checkedToday && daysSince !== null && daysSince >= 3;
+
+    let metaHtml = '';
+    if (checkedToday) {
+      metaHtml = `<span>🔥 Racha: ${dt.streak}</span><span>· Mejor: ${dt.best_streak}</span>`;
+    } else if (daysSince === null) {
+      metaHtml = `<span>Sin registrar aún</span>`;
+    } else if (daysSince === 0) {
+      metaHtml = `<span>🔥 Racha: ${dt.streak}</span><span>· Mejor: ${dt.best_streak}</span>`;
+    } else {
+      metaHtml = `<span>${daysSince} día${daysSince === 1 ? '' : 's'} sin check</span><span>· Mejor racha: ${dt.best_streak}</span>`;
+    }
+
+    return `
+      <div class="daily-item ${checkedToday ? 'checked-today' : ''} ${warning ? 'warning' : ''}" data-id="${dt.id}">
+        <input type="checkbox" ${checkedToday ? 'checked' : ''} data-action="toggle-daily">
+        <div class="daily-item-body">
+          <div class="daily-item-title">${escapeHtml(dt.title)}</div>
+          <div class="daily-item-meta">${metaHtml}</div>
+        </div>
+        <button type="button" class="daily-item-delete" data-action="delete-daily" aria-label="Eliminar">✕</button>
+      </div>
+    `;
+  }).join('');
+
+  list.querySelectorAll('[data-action="toggle-daily"]').forEach(el => {
+    el.addEventListener('change', (e) => onToggleDaily(e.target.closest('.daily-item').dataset.id, e.target.checked));
+  });
+  list.querySelectorAll('[data-action="delete-daily"]').forEach(el => {
+    el.addEventListener('click', (e) => onDeleteDaily(e.target.closest('.daily-item').dataset.id));
+  });
+}
+
+async function onToggleDaily(id, isChecked) {
+  const dt = state.dailyTasks.find(d => d.id === id);
+  if (!dt) return;
+  const today = todayISO();
+
+  let update;
+  if (isChecked) {
+    const wasYesterday = dt.last_checked_date === yesterdayISO(today);
+    const newStreak = wasYesterday ? dt.streak + 1 : 1;
+    update = {
+      last_checked_date: today,
+      streak: newStreak,
+      best_streak: Math.max(dt.best_streak, newStreak),
+    };
+  } else {
+    // Deshacer el check de hoy: retrocede la racha y marca como si el último
+    // check hubiera sido ayer (aproximación razonable para uso personal).
+    const newStreak = Math.max(0, dt.streak - 1);
+    update = {
+      last_checked_date: newStreak > 0 ? yesterdayISO(today) : null,
+      streak: newStreak,
+      best_streak: dt.best_streak,
+    };
+  }
+
+  Object.assign(dt, update);
+  renderDailySection();
+
+  const { error } = await db.from('daily_tasks').update(update).eq('id', id);
+  if (error) showToast('No se pudo guardar: ' + error.message);
+}
+
+async function onDeleteDaily(id) {
+  if (!confirm('¿Eliminar esta tarea diaria?')) return;
+  state.dailyTasks = state.dailyTasks.filter(d => d.id !== id);
+  renderDailySection();
+  const { error } = await db.from('daily_tasks').delete().eq('id', id);
+  if (error) showToast('No se pudo eliminar: ' + error.message);
 }
 
 // ============================================================
