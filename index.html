@@ -43,6 +43,7 @@
     <nav class="section-tabs" id="section-tabs">
       <button class="section-tab active" data-section="board">Tablero</button>
       <button class="section-tab" data-section="recurring">📅 Recurrentes</button>
+      <button class="section-tab" data-section="client">🤝 Cliente</button>
       <button class="section-tab" data-section="archive">🗄 Archivo</button>
     </nav>
 
@@ -83,6 +84,14 @@
       <button class="btn btn-text" id="clear-filters">Limpiar filtros</button>
     </div>
 
+    <section class="today-plan-section" id="today-plan-section">
+      <div class="today-plan-header">
+        <h2>📌 Hoy voy a hacer</h2>
+        <span class="today-plan-hint">Arrastra tarjetas del tablero aquí — regresan solas al terminar el día</span>
+      </div>
+      <div class="today-plan-zone" id="today-plan-zone"></div>
+    </section>
+
     <section class="daily-section" id="daily-section">
       <div class="daily-header">
         <h2><span class="rec-dot" style="animation:none;background:var(--accent)"></span> Rutina diaria</h2>
@@ -103,6 +112,7 @@
 
   <!-- ============ VISTA DE RECURRENTES ============ -->
   <section class="recurring-wrap" id="recurring-wrap" hidden>
+    <div class="recurring-overdue-banner" id="recurring-overdue-banner" hidden></div>
     <div class="recurring-layout">
       <div class="recurring-sidebar">
         <h2 class="section-h">Nueva tarea recurrente</h2>
@@ -159,6 +169,17 @@
         <div class="calendar-grid" id="calendar-grid"></div>
         <div class="calendar-day-panel" id="calendar-day-panel"></div>
       </div>
+    </div>
+  </section>
+
+  <!-- ============ VISTA DE CLIENTE ============ -->
+  <section class="client-wrap" id="client-wrap" hidden>
+    <div class="archive-header">
+      <h2 class="section-h">Depende de Cliente</h2>
+      <p class="archive-sub">Estas tareas viven solo aquí — no aparecen en el tablero general mientras dependan del cliente.</p>
+    </div>
+    <div class="board-wrap">
+      <div class="board" id="client-board"></div>
     </div>
   </section>
 
