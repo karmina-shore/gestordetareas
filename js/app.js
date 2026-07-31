@@ -74,6 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupAreasModal();
   setupDailySection();
   setupRecurringSection();
+  setupTodayPlanZone();
   watchForDayChange();
 });
 
@@ -82,11 +83,17 @@ document.addEventListener('DOMContentLoaded', () => {
 // que los checks se vean reiniciados sin necesidad de recargar la página.
 function watchForDayChange() {
   let lastKnownDate = todayISO();
-  setInterval(() => {
+  setInterval(async () => {
     const current = todayISO();
     if (current !== lastKnownDate) {
       lastKnownDate = current;
+      await clearStalePlannedDates();
       renderDailySection();
+      renderBoard();
+      renderTodayPlanZone();
+      renderCalendar();
+      renderOverdueRecurring();
+      if (state.section === 'client') renderClientView();
     }
   }, 60000);
 }
@@ -155,14 +162,18 @@ async function loadAll() {
   state.recurringTasks = recurringRes.data || [];
   state.recurringCompletions = completionsRes.data || [];
 
+  await clearStalePlannedDates();
   await runAutoArchiveIfNeeded();
 
   populateAreaFilter();
   renderBoard();
+  renderTodayPlanZone();
   renderQuickList();
   renderDailySection();
   renderRecurringRulesList();
   renderCalendar();
+  renderOverdueRecurring();
+  if (state.section === 'client') renderClientView();
 }
 
 // ============================================================
@@ -204,8 +215,9 @@ async function runAutoArchiveIfNeeded() {
 function populateAreaFilter() {
   const sel = document.getElementById('filter-area');
   const current = sel.value;
-  sel.innerHTML = '<option value="">Todas</option>' + state.areas.map(a => `<option value="${escapeHtml(a.name)}">${escapeHtml(a.name)}</option>`).join('');
-  if (state.areas.some(a => a.name === current)) sel.value = current;
+  const options = state.areas.filter(a => a.name !== 'Cliente');
+  sel.innerHTML = '<option value="">Todas</option>' + options.map(a => `<option value="${escapeHtml(a.name)}">${escapeHtml(a.name)}</option>`).join('');
+  if (options.some(a => a.name === current)) sel.value = current;
 }
 
 function populateTaskAreaSelect(selectedValue) {
@@ -246,9 +258,11 @@ function setSection(section) {
   document.getElementById('board-section').hidden = section !== 'board';
   document.getElementById('view-tabs').hidden = section !== 'board';
   document.getElementById('recurring-wrap').hidden = section !== 'recurring';
+  document.getElementById('client-wrap').hidden = section !== 'client';
   document.getElementById('archive-wrap').hidden = section !== 'archive';
 
-  if (section === 'recurring') { renderRecurringRulesList(); renderCalendar(); }
+  if (section === 'recurring') { renderRecurringRulesList(); renderCalendar(); renderOverdueRecurring(); }
+  if (section === 'client') { renderClientView(); }
   if (section === 'archive') { renderArchiveView(); }
 }
 
@@ -281,18 +295,23 @@ function setupFilterbar() {
 // Board rendering
 // ============================================================
 function renderColumnsSkeleton() {
-  const board = document.getElementById('board');
+  buildColumnsSkeleton('board', '');
+  buildColumnsSkeleton('client-board', 'client-');
+}
+
+function buildColumnsSkeleton(containerId, idPrefix) {
+  const board = document.getElementById(containerId);
   board.innerHTML = STATUSES.map(s => `
     <div class="column" data-status="${s.key}">
       <div class="column-header">
         <span class="column-title">${s.label}</span>
-        <span class="column-count" id="count-${s.key}">0</span>
+        <span class="column-count" id="${idPrefix}count-${s.key}">0</span>
       </div>
-      <div class="column-body" id="col-${s.key}" data-status="${s.key}"></div>
+      <div class="column-body" id="${idPrefix}col-${s.key}" data-status="${s.key}"></div>
     </div>
   `).join('');
 
-  document.querySelectorAll('.column-body').forEach(el => {
+  board.querySelectorAll('.column-body').forEach(el => {
     el.addEventListener('dragover', onColumnDragOver);
     el.addEventListener('dragleave', onColumnDragLeave);
     el.addEventListener('drop', onColumnDrop);
@@ -306,8 +325,11 @@ function isTaskBlocked(task) {
 }
 
 function getVisibleTasks() {
+  const today = todayISO();
   return state.tasks.filter(t => {
     if (t.archived) return false;
+    if (t.area === 'Cliente') return false;          // vive solo en la vista de Cliente
+    if (t.planned_date === today) return false;       // vive solo en "Hoy voy a hacer"
     if (state.view !== 'todo' && t.vertiente !== state.view) return false;
     if (state.filters.area && t.area !== state.filters.area) return false;
     if (state.filters.priority && t.priority !== state.filters.priority) return false;
@@ -316,20 +338,54 @@ function getVisibleTasks() {
   });
 }
 
-function renderBoard() {
-  const visible = getVisibleTasks();
+function getClientTasks() {
+  const today = todayISO();
+  return state.tasks.filter(t => !t.archived && t.area === 'Cliente' && t.planned_date !== today);
+}
 
+function getTodayPlanTasks() {
+  const today = todayISO();
+  return state.tasks.filter(t => !t.archived && t.planned_date === today);
+}
+
+// Orden automático: 1) vence hoy, 2) urgente, 3) área "Mío" — el resto conserva su orden original
+function taskSortKey(t) {
+  const today = todayISO();
+  return [
+    (t.due_date === today && t.status !== 'completado') ? 0 : 1,
+    t.priority === 'urgente' ? 0 : 1,
+    t.area === 'Mío' ? 0 : 1,
+  ];
+}
+function compareTasks(a, b) {
+  const ka = taskSortKey(a), kb = taskSortKey(b);
+  for (let i = 0; i < ka.length; i++) {
+    if (ka[i] !== kb[i]) return ka[i] - kb[i];
+  }
+  return 0;
+}
+
+function renderBoard() {
+  renderTasksIntoColumns(getVisibleTasks(), '', { showVertiente: state.view === 'todo' });
+}
+
+function renderClientView() {
+  renderTasksIntoColumns(getClientTasks(), 'client-', { showVertiente: true });
+}
+
+function renderTasksIntoColumns(tasksList, idPrefix, opts = {}) {
   STATUSES.forEach(s => {
-    const col = document.getElementById(`col-${s.key}`);
-    const items = visible.filter(t => t.status === s.key);
-    document.getElementById(`count-${s.key}`).textContent = items.length;
+    const col = document.getElementById(`${idPrefix}col-${s.key}`);
+    if (!col) return;
+    const items = tasksList.filter(t => t.status === s.key).sort(compareTasks);
+    document.getElementById(`${idPrefix}count-${s.key}`).textContent = items.length;
 
     if (items.length === 0) {
       col.innerHTML = `<div class="column-empty">Sin tareas aquí</div>`;
       return;
     }
 
-    col.innerHTML = items.map(renderCard).join('');
+    col.innerHTML = items.map(t => renderCard(t, opts)).join('');
 
     col.querySelectorAll('.card').forEach(cardEl => {
       cardEl.addEventListener('dragstart', onCardDragStart);
@@ -339,7 +395,7 @@ function renderBoard() {
   });
 }
 
-function renderCard(task) {
+function renderCard(task, opts = {}) {
   const subs = state.subtasks.filter(st => st.task_id === task.id);
   const hasSubs = subs.length > 0;
   const doneCount = subs.filter(s => s.done).length;
@@ -349,6 +405,7 @@ function renderCard(task) {
   const today = todayISO();
   const overdue = task.due_date && task.due_date < today && task.status !== 'completado';
   const dueToday = task.due_date === today && task.status !== 'completado';
+  const showVertiente = opts.showVertiente !== false && (opts.showVertiente || state.view === 'todo');
 
   const areaTag = task.area
     ? `<span class="tag tag-area" style="background:${getAreaColor(task.area)}">${escapeHtml(task.area)}</span>`
@@ -367,7 +424,7 @@ function renderCard(task) {
           <span class="card-progress-label">${doneCount}/${subs.length}</span>
         </div>` : ''}
       <div class="card-tags">
-        ${state.view === 'todo' ? `<span class="tag tag-vertiente-${task.vertiente}">${VERTIENTE_LABELS[task.vertiente]}</span>` : ''}
+        ${showVertiente ? `<span class="tag tag-vertiente-${task.vertiente}">${VERTIENTE_LABELS[task.vertiente]}</span>` : ''}
         ${areaTag}
         ${blocked ? `<span class="tag tag-blocked">🔒 ${escapeHtml(depTask ? depTask.title : 'Tarea previa')}</span>` : ''}
         ${task.due_date ? `<span class="tag tag-due ${overdue ? 'overdue' : ''} ${dueToday ? 'today' : ''}">${dueToday ? 'Hoy' : formatDate(task.due_date)}</span>` : ''}
@@ -415,14 +472,98 @@ async function onColumnDrop(e) {
   if (!draggedTaskId) return;
 
   const task = state.tasks.find(t => t.id === draggedTaskId);
-  if (!task || task.status === newStatus) return;
+  if (!task) return;
 
+  const wasPlanned = !!task.planned_date;
+  if (task.status === newStatus && !wasPlanned) { draggedTaskId = null; return; }
+
+  const update = { status: newStatus };
   task.status = newStatus;
-  renderBoard();
+  if (wasPlanned) { update.planned_date = null; task.planned_date = null; }
 
-  const { error } = await db.from('tasks').update({ status: newStatus }).eq('id', draggedTaskId);
+  renderBoard();
+  renderTodayPlanZone();
+  if (state.section === 'client') renderClientView();
+
+  const { error } = await db.from('tasks').update(update).eq('id', draggedTaskId);
   if (error) showToast('No se pudo actualizar el estatus: ' + error.message);
   draggedTaskId = null;
+}
+
+// ============================================================
+// "Hoy voy a hacer"
+// ============================================================
+function setupTodayPlanZone() {
+  const zone = document.getElementById('today-plan-zone');
+  zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', onTodayZoneDrop);
+}
+
+async function onTodayZoneDrop(e) {
+  e.preventDefault();
+  const zone = document.getElementById('today-plan-zone');
+  zone.classList.remove('drag-over');
+  if (!draggedTaskId) return;
+
+  const task = state.tasks.find(t => t.id === draggedTaskId);
+  if (!task) { draggedTaskId = null; return; }
+
+  const today = todayISO();
+  task.planned_date = today;
+  renderBoard();
+  renderTodayPlanZone();
+  if (state.section === 'client') renderClientView();
+
+  const { error } = await db.from('tasks').update({ planned_date: today }).eq('id', draggedTaskId);
+  if (error) showToast('No se pudo planear: ' + error.message);
+  draggedTaskId = null;
+}
+
+async function returnFromTodayPlan(taskId) {
+  const task = state.tasks.find(t => t.id === taskId);
+  if (!task) return;
+  task.planned_date = null;
+  renderBoard();
+  renderTodayPlanZone();
+  if (state.section === 'client') renderClientView();
+  const { error } = await db.from('tasks').update({ planned_date: null }).eq('id', taskId);
+  if (error) showToast('No se pudo regresar: ' + error.message);
+}
+
+function renderTodayPlanZone() {
+  const zone = document.getElementById('today-plan-zone');
+  const items = getTodayPlanTasks().sort(compareTasks);
+
+  if (items.length === 0) {
+    zone.innerHTML = '<div class="today-plan-empty">Nada planeado todavía — arrastra una tarjeta del tablero.</div>';
+    return;
+  }
+
+  zone.innerHTML = items.map(t => `
+    <div>
+      ${renderCard(t, { showVertiente: true })}
+      <button type="button" class="today-plan-return" data-id="${t.id}">↩ Regresar al tablero</button>
+    </div>
+  `).join('');
+
+  zone.querySelectorAll('.card').forEach(cardEl => {
+    cardEl.addEventListener('dragstart', onCardDragStart);
+    cardEl.addEventListener('dragend', onCardDragEnd);
+    cardEl.addEventListener('click', () => openTaskModal(cardEl.dataset.id));
+  });
+  zone.querySelectorAll('.today-plan-return').forEach(btn => {
+    btn.addEventListener('click', (e) => returnFromTodayPlan(e.target.dataset.id));
+  });
+}
+
+async function clearStalePlannedDates() {
+  const today = todayISO();
+  const stale = state.tasks.filter(t => t.planned_date && t.planned_date !== today);
+  if (stale.length === 0) return;
+  const ids = stale.map(t => t.id);
+  const { error } = await db.from('tasks').update({ planned_date: null }).in('id', ids);
+  if (!error) stale.forEach(t => { t.planned_date = null; });
 }
 
 // ============================================================
@@ -927,6 +1068,13 @@ function formatDateLong(iso) {
   return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+// Para fechas puras 'YYYY-MM-DD' (sin hora) — evita el corrimiento de un día
+// que causa parsear ese formato directo con `new Date()` en husos horarios negativos.
+function formatDateOnlyLong(dateOnlyISO) {
+  const d = new Date(dateOnlyISO + 'T00:00:00');
+  return d.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'short' });
+}
+
 // ============================================================
 // Tareas recurrentes + calendario
 // ============================================================
@@ -1121,6 +1269,65 @@ async function toggleRecurringCompletion(ruleId, dateISO, done) {
     renderCalendarDayPanel();
     renderCalendar();
   }
+}
+
+function getWeekStartMonday(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function getOverdueRecurringOccurrences() {
+  const today = new Date();
+  const todayStr = todayISO();
+  const weekStart = getWeekStartMonday(today);
+  const overdue = [];
+
+  for (let d = new Date(weekStart); dateToISO(d) < todayStr; d.setDate(d.getDate() + 1)) {
+    const iso = dateToISO(d);
+    state.recurringTasks.forEach(r => {
+      if (!ruleOccursOn(r, d)) return;
+      const completion = state.recurringCompletions.find(c => c.recurring_task_id === r.id && c.occurrence_date === iso);
+      if (!completion || !completion.done) {
+        overdue.push({ rule: r, dateISO: iso });
+      }
+    });
+  }
+  return overdue;
+}
+
+function renderOverdueRecurring() {
+  const banner = document.getElementById('recurring-overdue-banner');
+  const overdue = getOverdueRecurringOccurrences();
+
+  if (overdue.length === 0) {
+    banner.hidden = true;
+    banner.innerHTML = '';
+    return;
+  }
+
+  banner.hidden = false;
+  banner.innerHTML = `
+    <h3>⚠️ Atrasadas esta semana (${overdue.length})</h3>
+    <ul class="recurring-overdue-list">
+      ${overdue.map((o, i) => `
+        <li class="recurring-overdue-item" data-idx="${i}">
+          <span>${escapeHtml(o.rule.title)} <small>${formatDateOnlyLong(o.dateISO)}</small></span>
+          <button type="button" data-action="mark-done">Marcar hecho</button>
+        </li>
+      `).join('')}
+    </ul>
+  `;
+
+  banner.querySelectorAll('[data-action="mark-done"]').forEach((btn, i) => {
+    btn.addEventListener('click', () => {
+      const o = overdue[i];
+      toggleRecurringCompletion(o.rule.id, o.dateISO, true).then(renderOverdueRecurring);
+    });
+  });
 }
 
 // ============================================================
