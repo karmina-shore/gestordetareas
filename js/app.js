@@ -16,9 +16,9 @@ const VERTIENTE_LABELS = {
 };
 
 const AREA_PALETTE = [
-  '#c77dff', '#4fb4e8', '#4caf7d', '#e8a33d', '#9298a6',
-  '#f2789f', '#f2a65a', '#6c8ef5', '#e14f4f', '#3ecf8e',
-  '#d68fd6', '#8fa8d6', '#d6c48f', '#8fd6c4',
+  '#b98cc9', '#7d93b8', '#7a9b5e', '#c1633f', '#8f8577',
+  '#c97d94', '#c9974f', '#8fa679', '#b8493f', '#4fa889',
+  '#a68fd6', '#7fa8c9', '#c9b06f', '#8fc9a6',
 ];
 function getAreaColor(name) {
   const idx = state.areas.findIndex(a => a.name === name);
@@ -37,7 +37,9 @@ let state = {
   areas: [],
   recurringTasks: [],
   recurringCompletions: [],
-  section: 'board',    // 'board' | 'recurring' | 'archive'
+  keepInMinds: [],
+  section: 'home',    // 'home' | 'board' | 'recurring' | 'client' | 'paused' | 'archive'
+  archiveFilter: 'completado', // 'completado' | 'cancelada'
   calendarDate: new Date(),   // mes que se está viendo en el calendario
   selectedDay: null,           // 'YYYY-MM-DD' seleccionado en el calendario
   view: 'todo',        // 'todo' | 'shore_content' | 'pm_video' | 'produccion_video'
@@ -75,6 +77,8 @@ document.addEventListener('DOMContentLoaded', () => {
   setupDailySection();
   setupRecurringSection();
   setupTodayPlanZone();
+  setupKeepInMind();
+  setupArchiveFilter();
   watchForDayChange();
 });
 
@@ -93,7 +97,9 @@ function watchForDayChange() {
       renderTodayPlanZone();
       renderCalendar();
       renderOverdueRecurring();
+      renderHome();
       if (state.section === 'client') renderClientView();
+      if (state.section === 'paused') renderPausedView();
     }
   }, 60000);
 }
@@ -142,7 +148,7 @@ async function enterApp() {
 // Data loading
 // ============================================================
 async function loadAll() {
-  const [tasksRes, subtasksRes, quickRes, dailyRes, areasRes, recurringRes, completionsRes] = await Promise.all([
+  const [tasksRes, subtasksRes, quickRes, dailyRes, areasRes, recurringRes, completionsRes, keepRes] = await Promise.all([
     db.from('tasks').select('*').order('position', { ascending: true }),
     db.from('subtasks').select('*').order('position', { ascending: true }),
     db.from('quick_pendings').select('*').order('created_at', { ascending: true }),
@@ -150,6 +156,7 @@ async function loadAll() {
     db.from('areas').select('*').order('position', { ascending: true }),
     db.from('recurring_tasks').select('*').order('created_at', { ascending: true }),
     db.from('recurring_completions').select('*'),
+    db.from('keep_in_minds').select('*').order('position', { ascending: true }),
   ]);
 
   if (tasksRes.error) { showToast('Error cargando tareas: ' + tasksRes.error.message); return; }
@@ -161,6 +168,7 @@ async function loadAll() {
   state.areas = areasRes.data || [];
   state.recurringTasks = recurringRes.data || [];
   state.recurringCompletions = completionsRes.data || [];
+  state.keepInMinds = keepRes.data || [];
 
   await clearStalePlannedDates();
   await runAutoArchiveIfNeeded();
@@ -169,11 +177,15 @@ async function loadAll() {
   renderBoard();
   renderTodayPlanZone();
   renderQuickList();
+  renderKeepInMindList();
   renderDailySection();
   renderRecurringRulesList();
   renderCalendar();
   renderOverdueRecurring();
+  renderHome();
   if (state.section === 'client') renderClientView();
+  if (state.section === 'paused') renderPausedView();
+  if (state.section === 'archive') renderArchiveView();
 }
 
 // ============================================================
@@ -255,14 +267,18 @@ function setSection(section) {
 
   document.querySelectorAll('.section-tab').forEach(b => b.classList.toggle('active', b.dataset.section === section));
 
+  document.getElementById('home-wrap').hidden = section !== 'home';
   document.getElementById('board-section').hidden = section !== 'board';
   document.getElementById('view-tabs').hidden = section !== 'board';
   document.getElementById('recurring-wrap').hidden = section !== 'recurring';
   document.getElementById('client-wrap').hidden = section !== 'client';
+  document.getElementById('paused-wrap').hidden = section !== 'paused';
   document.getElementById('archive-wrap').hidden = section !== 'archive';
 
+  if (section === 'home') { renderHome(); }
   if (section === 'recurring') { renderRecurringRulesList(); renderCalendar(); renderOverdueRecurring(); }
   if (section === 'client') { renderClientView(); }
+  if (section === 'paused') { renderPausedView(); }
   if (section === 'archive') { renderArchiveView(); }
 }
 
@@ -700,10 +716,15 @@ function addSubtaskToEditingList() {
 async function onSaveTask(e) {
   e.preventDefault();
 
+  const newStatus = document.getElementById('task-status').value;
+  const existingId = document.getElementById('task-id').value;
+  const existingTask = existingId ? state.tasks.find(t => t.id === existingId) : null;
+  const oldStatus = existingTask ? existingTask.status : null;
+
   const payload = {
     title: document.getElementById('task-title').value.trim(),
     vertiente: document.getElementById('task-vertiente').value,
-    status: document.getElementById('task-status').value,
+    status: newStatus,
     priority: document.getElementById('task-priority').value,
     due_date: document.getElementById('task-due').value || null,
     area: document.getElementById('task-area').value || null,
@@ -712,7 +733,20 @@ async function onSaveTask(e) {
     notes: document.getElementById('task-notes').value.trim(),
   };
 
-  const existingId = document.getElementById('task-id').value;
+  // Pausar: recuerda en qué columna estaba para poder reanudarla ahí mismo
+  if (newStatus === 'pausada' && oldStatus !== 'pausada') {
+    payload.previous_status = oldStatus || 'pendiente';
+  }
+  // Cancelar: se archiva automáticamente (clasificada aparte de "Completadas")
+  if (newStatus === 'cancelada') {
+    payload.archived = true;
+    payload.archived_at = new Date().toISOString();
+  } else if (oldStatus === 'cancelada' && newStatus !== 'cancelada') {
+    // Se está reviviendo una tarea cancelada
+    payload.archived = false;
+    payload.archived_at = null;
+  }
+
   let taskId = existingId;
 
   if (existingId) {
@@ -1029,14 +1063,28 @@ async function addArea() {
 // ============================================================
 // Archivo
 // ============================================================
+function setupArchiveFilter() {
+  document.querySelectorAll('.pill-tab[data-archive-filter]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.pill-tab[data-archive-filter]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.archiveFilter = btn.dataset.archiveFilter;
+      renderArchiveView();
+    });
+  });
+}
+
 function renderArchiveView() {
   const list = document.getElementById('archive-list');
   const archived = state.tasks
-    .filter(t => t.archived)
+    .filter(t => t.archived && t.status === state.archiveFilter)
     .sort((a, b) => new Date(b.archived_at || 0) - new Date(a.archived_at || 0));
 
   if (archived.length === 0) {
-    list.innerHTML = '<div class="archive-empty">Todavía no hay tareas archivadas. Se archivan solas cada viernes a las 11:59 PM.</div>';
+    const emptyMsg = state.archiveFilter === 'cancelada'
+      ? 'No tienes tareas canceladas archivadas.'
+      : 'Todavía no hay tareas completadas archivadas. Se archivan solas cada viernes a las 11:59 PM.';
+    list.innerHTML = `<div class="archive-empty">${emptyMsg}</div>`;
     return;
   }
 
@@ -1327,6 +1375,138 @@ function renderOverdueRecurring() {
       const o = overdue[i];
       toggleRecurringCompletion(o.rule.id, o.dateISO, true).then(renderOverdueRecurring);
     });
+  });
+}
+
+async function resumeTask(taskId) {
+  const task = state.tasks.find(t => t.id === taskId);
+  if (!task) return;
+  const newStatus = task.previous_status || 'pendiente';
+  task.status = newStatus;
+  task.previous_status = null;
+  renderPausedView();
+  renderBoard();
+  const { error } = await db.from('tasks').update({ status: newStatus, previous_status: null }).eq('id', taskId);
+  if (error) { showToast('No se pudo reanudar: ' + error.message); return; }
+  showToast('Tarea reanudada.');
+}
+
+function renderPausedView() {
+  const list = document.getElementById('paused-list');
+  const paused = state.tasks.filter(t => t.status === 'pausada' && !t.archived).sort(compareTasks);
+
+  if (paused.length === 0) {
+    list.innerHTML = '<div class="archive-empty">No tienes tareas pausadas ahora mismo.</div>';
+    return;
+  }
+
+  list.innerHTML = paused.map(t => `
+    <div class="paused-card-wrap" data-id="${t.id}">
+      ${renderCard(t, { showVertiente: true })}
+      <button type="button" class="paused-resume-btn" data-id="${t.id}">▶ Reanudar</button>
+    </div>
+  `).join('');
+
+  list.querySelectorAll('.card').forEach(cardEl => {
+    cardEl.addEventListener('click', () => openTaskModal(cardEl.dataset.id));
+  });
+  list.querySelectorAll('.paused-resume-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); resumeTask(e.target.dataset.id); });
+  });
+}
+
+// ============================================================
+// Keep in mind
+// ============================================================
+function setupKeepInMind() {
+  document.getElementById('keepinmind-add-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = document.getElementById('keepinmind-add-input');
+    const title = input.value.trim();
+    if (!title) return;
+
+    const { data, error } = await db.from('keep_in_minds').insert({ title, position: state.keepInMinds.length }).select().single();
+    if (error) { showToast('Error al agregar: ' + error.message); return; }
+
+    state.keepInMinds.push(data);
+    input.value = '';
+    renderKeepInMindList();
+  });
+}
+
+function renderKeepInMindList() {
+  const list = document.getElementById('keepinmind-list');
+  if (state.keepInMinds.length === 0) {
+    list.innerHTML = '<li class="quick-empty">Nada en el radar todavía.</li>';
+    return;
+  }
+
+  list.innerHTML = state.keepInMinds.map(k => `
+    <li class="quick-item ${k.done ? 'done' : ''}" data-id="${k.id}">
+      <input type="checkbox" ${k.done ? 'checked' : ''} data-action="toggle">
+      <span>${escapeHtml(k.title)}</span>
+      <button type="button" data-action="remove" aria-label="Eliminar">✕</button>
+    </li>
+  `).join('');
+
+  list.querySelectorAll('[data-action="toggle"]').forEach(el => {
+    el.addEventListener('change', async (e) => {
+      const id = e.target.closest('.quick-item').dataset.id;
+      const item = state.keepInMinds.find(k => k.id === id);
+      item.done = e.target.checked;
+      renderKeepInMindList();
+      await db.from('keep_in_minds').update({ done: item.done }).eq('id', id);
+    });
+  });
+  list.querySelectorAll('[data-action="remove"]').forEach(el => {
+    el.addEventListener('click', async (e) => {
+      const id = e.target.closest('.quick-item').dataset.id;
+      state.keepInMinds = state.keepInMinds.filter(k => k.id !== id);
+      renderKeepInMindList();
+      await db.from('keep_in_minds').delete().eq('id', id);
+    });
+  });
+}
+
+// ============================================================
+// Inicio / Resumen
+// ============================================================
+function renderHome() {
+  const grid = document.getElementById('home-grid');
+  const today = todayISO();
+
+  const activeTasks = state.tasks.filter(t => !t.archived && t.area !== 'Cliente' && t.status !== 'pausada' && t.status !== 'cancelada');
+  const urgentCount = activeTasks.filter(t => t.priority === 'urgente').length;
+  const plannedCount = getTodayPlanTasks().length;
+  const pausedCount = state.tasks.filter(t => t.status === 'pausada' && !t.archived).length;
+  const clientCount = getClientTasks().length;
+  const overdueRecurring = getOverdueRecurringOccurrences().length;
+  const dailyDone = state.dailyTasks.filter(d => d.last_checked_date === today).length;
+  const keepCount = state.keepInMinds.filter(k => !k.done).length;
+  const archivedCompleted = state.tasks.filter(t => t.archived && t.status === 'completado').length;
+  const archivedCancelled = state.tasks.filter(t => t.archived && t.status === 'cancelada').length;
+
+  const tiles = [
+    { icon: '📋', title: 'Tablero', stat: `${activeTasks.length} activas · ${urgentCount} urgentes`, section: 'board', alert: false },
+    { icon: '📌', title: 'Hoy voy a hacer', stat: `${plannedCount} planeadas`, section: 'board', alert: false },
+    { icon: '🔥', title: 'Rutina diaria', stat: `${dailyDone}/${state.dailyTasks.length} hoy`, section: 'board', alert: false },
+    { icon: '🗒', title: 'Keep in mind', stat: `${keepCount} en el radar`, section: 'board', alert: false },
+    { icon: '📅', title: 'Recurrentes', stat: overdueRecurring > 0 ? `${overdueRecurring} atrasadas` : 'Al día', section: 'recurring', alert: overdueRecurring > 0 },
+    { icon: '🤝', title: 'Cliente', stat: `${clientCount} pendientes`, section: 'client', alert: false },
+    { icon: '⏸', title: 'Pausadas', stat: `${pausedCount} atoradas`, section: 'paused', alert: pausedCount > 0 },
+    { icon: '🗄', title: 'Archivo', stat: `${archivedCompleted} completadas · ${archivedCancelled} canceladas`, section: 'archive', alert: false },
+  ];
+
+  grid.innerHTML = tiles.map(t => `
+    <button type="button" class="home-tile ${t.alert ? 'alert' : ''}" data-section="${t.section}">
+      <span class="home-tile-icon">${t.icon}</span>
+      <span class="home-tile-title">${t.title}</span>
+      <span class="home-tile-stat">${t.stat}</span>
+    </button>
+  `).join('');
+
+  grid.querySelectorAll('.home-tile').forEach(tile => {
+    tile.addEventListener('click', () => setSection(tile.dataset.section));
   });
 }
 
