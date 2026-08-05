@@ -2,31 +2,34 @@
    SHORE Kanban — Tokens
    ============================================================ */
 :root {
-  --bg: #12141a;
-  --surface: #1b1e27;
-  --surface-2: #22262f;
-  --surface-3: #2a2f3a;
-  --border: #2e323d;
-  --border-soft: #262a33;
+  /* Paleta cálida editorial — "cuarto de edición" con luz de tungsteno */
+  --bg: #1a1512;
+  --surface: #241d18;
+  --surface-2: #2c231d;
+  --surface-3: #362b23;
+  --border: #46362b;
+  --border-soft: #362a22;
 
-  --text: #edeef2;
-  --text-dim: #9298a6;
-  --text-faint: #5c6270;
+  --text: #f3e9dc;
+  --text-dim: #b8a794;
+  --text-faint: #7a6a5a;
 
-  --accent: #e8a33d;
-  --accent-dim: #7a5a28;
-  --accent-soft: rgba(232, 163, 61, 0.14);
+  --accent: #c1633f;               /* terracota */
+  --accent-dim: #7a4128;
+  --accent-soft: rgba(193, 99, 63, 0.18);
 
-  --danger: #e14f4f;
-  --danger-soft: rgba(225, 79, 79, 0.14);
-  --success: #4caf7d;
-  --success-soft: rgba(76, 175, 125, 0.14);
+  --danger: #b8493f;                /* rojo tierra */
+  --danger-soft: rgba(184, 73, 63, 0.18);
+  --success: #7a9b5e;                /* oliva */
+  --success-soft: rgba(122, 155, 94, 0.18);
+  --warn: #c9974f;                   /* ocre, para pausadas */
+  --warn-soft: rgba(201, 151, 79, 0.18);
 
-  --vert-content: #6c8ef5;
-  --vert-video: #f2a65a;
-  --vert-prod: #7dd3a8;
+  --vert-content: #7d93b8;           /* azul empolvado, contraste fresco */
+  --vert-video: #c9974f;             /* ocre */
+  --vert-prod: #8fa679;              /* salvia */
 
-  --font-display: 'Space Grotesk', sans-serif;
+  --font-display: 'Fraunces', serif;
   --font-body: 'Inter', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
@@ -34,8 +37,8 @@
   --radius: 10px;
   --radius-lg: 16px;
 
-  --shadow-lg: 0 24px 48px -12px rgba(0, 0, 0, 0.55);
-  --shadow-md: 0 8px 24px -8px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 24px 48px -12px rgba(0, 0, 0, 0.6);
+  --shadow-md: 0 8px 24px -8px rgba(0, 0, 0, 0.55);
 }
 
 * { box-sizing: border-box; }
@@ -164,9 +167,9 @@ textarea { resize: vertical; font-family: inherit; }
 }
 .btn-primary {
   background: var(--accent);
-  color: #1a1305;
+  color: #241d18;
 }
-.btn-primary:hover { background: #f0ad4c; }
+.btn-primary:hover { background: #d17c56; }
 .btn-ghost {
   background: transparent;
   border-color: var(--border);
@@ -234,7 +237,7 @@ textarea { resize: vertical; font-family: inherit; }
   white-space: nowrap;
 }
 .section-tab:hover { color: var(--text); border-color: var(--text-faint); }
-.section-tab.active { background: var(--accent); color: #1a1305; border-color: var(--accent); }
+.section-tab.active { background: var(--accent); color: #241d18; border-color: var(--accent); }
 
 .view-tabs {
   display: flex;
@@ -534,17 +537,8 @@ textarea { resize: vertical; font-family: inherit; }
   color: var(--text-dim);
 }
 
-/* area tag color coding */
-.tag-area { color: #12141a; }
-.tag-area[data-area="Brand"] { background: #c77dff; }
-.tag-area[data-area="MKT"] { background: #4fb4e8; }
-.tag-area[data-area="Comercial"] { background: #4caf7d; }
-.tag-area[data-area="Dirección"] { background: #e8a33d; }
-.tag-area[data-area="Administración"] { background: #9298a6; }
-.tag-area[data-area="Culture & People"] { background: #f2789f; }
-.tag-area[data-area="Producción"] { background: #f2a65a; }
-.tag-area[data-area="Postproducción"] { background: #6c8ef5; }
-.tag-area[data-area="Cliente"] { background: #e14f4f; color: #fff; }
+/* el color de cada área se asigna dinámicamente por JS (ver AREA_PALETTE) */
+.tag-area { color: #1a1512; }
 
 /* ============================================================
    Quick pendings panel
@@ -668,6 +662,108 @@ textarea { resize: vertical; font-family: inherit; }
   margin-top: 4px;
 }
 .modal-footer-right { display: flex; gap: 10px; margin-left: auto; }
+
+/* ============================================================
+   Inicio / Resumen
+   ============================================================ */
+.home-wrap { padding: 32px 24px 40px; }
+.home-header h1 {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+.home-sub { color: var(--text-dim); font-size: 14px; margin: 0 0 24px; }
+
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+.home-tile {
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, transform 0.15s;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.home-tile:hover { border-color: var(--accent); transform: translateY(-2px); }
+.home-tile.alert { border-color: var(--danger); background: linear-gradient(160deg, var(--danger-soft), var(--surface) 60%); }
+.home-tile-icon { font-size: 22px; }
+.home-tile-title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.home-tile-stat { font-family: var(--font-mono); font-size: 13px; color: var(--text-dim); }
+.home-tile.alert .home-tile-stat { color: var(--danger); }
+
+/* ============================================================
+   Board layout + Keep in mind
+   ============================================================ */
+.board-layout { display: flex; gap: 18px; align-items: flex-start; }
+.board-layout .board { flex: 1; min-width: 0; }
+
+.keepinmind-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  position: sticky;
+  top: 20px;
+}
+.keepinmind-header h2 {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+.keepinmind-sidebar .quick-add-form { margin-bottom: 10px; }
+.keepinmind-sidebar .quick-add-form input { font-size: 12px; padding: 7px 9px; }
+.keepinmind-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+
+/* ============================================================
+   Pausadas
+   ============================================================ */
+.paused-list { padding: 16px 24px 40px; display: flex; flex-wrap: wrap; gap: 12px; }
+.paused-list .card { width: 260px; }
+.paused-card-wrap { display: flex; flex-direction: column; }
+.paused-resume-btn {
+  margin-top: 6px;
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.paused-resume-btn:hover { background: var(--warn); color: var(--surface); }
+
+/* ============================================================
+   Pill tabs (filtro de Archivo)
+   ============================================================ */
+.archive-filter-toggle { display: flex; gap: 8px; margin-top: 12px; }
+.pill-tab {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pill-tab.active { background: var(--accent); color: var(--surface); border-color: var(--accent); }
 
 /* ============================================================
    Section headers (shared)
@@ -862,4 +958,6 @@ textarea { resize: vertical; font-family: inherit; }
   .field-row { grid-template-columns: 1fr; }
   .quick-panel { width: 100%; right: -100%; }
   .recurring-layout { grid-template-columns: 1fr; padding: 16px; }
+  .board-layout { flex-direction: column; }
+  .keepinmind-sidebar { width: 100%; position: static; }
 }
