@@ -6,7 +6,7 @@
 <title>SHORE · Tablero</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -41,13 +41,15 @@
     </div>
 
     <nav class="section-tabs" id="section-tabs">
-      <button class="section-tab active" data-section="board">Tablero</button>
+      <button class="section-tab active" data-section="home">🏠 Inicio</button>
+      <button class="section-tab" data-section="board">Tablero</button>
       <button class="section-tab" data-section="recurring">📅 Recurrentes</button>
       <button class="section-tab" data-section="client">🤝 Cliente</button>
+      <button class="section-tab" data-section="paused">⏸ Pausadas</button>
       <button class="section-tab" data-section="archive">🗄 Archivo</button>
     </nav>
 
-    <nav class="view-tabs" id="view-tabs">
+    <nav class="view-tabs" id="view-tabs" hidden>
       <button class="view-tab active" data-view="todo">Todo</button>
       <button class="view-tab" data-view="shore_content">SHORE Content</button>
       <button class="view-tab" data-view="pm_video">PM · Shore Video</button>
@@ -60,7 +62,16 @@
     </div>
   </header>
 
-  <div id="board-section">
+  <!-- ============ INICIO / RESUMEN ============ -->
+  <section class="home-wrap" id="home-wrap">
+    <div class="home-header">
+      <h1>Resumen</h1>
+      <p class="home-sub">Un vistazo rápido a todo lo que tienes en marcha.</p>
+    </div>
+    <div class="home-grid" id="home-grid"></div>
+  </section>
+
+  <div id="board-section" hidden>
     <div class="filterbar" id="filterbar">
       <div class="filter-group">
         <label>Área</label>
@@ -104,8 +115,20 @@
     </section>
 
     <main class="board-wrap">
-      <div class="board" id="board">
-        <!-- Las columnas se generan dinámicamente por JS -->
+      <div class="board-layout">
+        <div class="board" id="board">
+          <!-- Las columnas se generan dinámicamente por JS -->
+        </div>
+
+        <aside class="keepinmind-sidebar" id="keepinmind-sidebar">
+          <div class="keepinmind-header">
+            <h2>🗒 Keep in mind</h2>
+          </div>
+          <form id="keepinmind-add-form" class="quick-add-form">
+            <input type="text" id="keepinmind-add-input" placeholder="Algo que tener en el radar…" required>
+          </form>
+          <ul class="keepinmind-list" id="keepinmind-list"></ul>
+        </aside>
       </div>
     </main>
   </div>
@@ -183,11 +206,24 @@
     </div>
   </section>
 
+  <!-- ============ VISTA DE PAUSADAS ============ -->
+  <section class="paused-wrap" id="paused-wrap" hidden>
+    <div class="archive-header">
+      <h2 class="section-h">Pausadas / atoradas</h2>
+      <p class="archive-sub">Tareas en espera por algo — reanúdalas cuando se destrabe.</p>
+    </div>
+    <div class="paused-list" id="paused-list"></div>
+  </section>
+
   <!-- ============ VISTA DE ARCHIVO ============ -->
   <section class="archive-wrap" id="archive-wrap" hidden>
     <div class="archive-header">
       <h2 class="section-h">Archivo</h2>
       <p class="archive-sub">Tareas completadas se archivan automáticamente cada viernes a las 11:59 PM. Aquí no se borra nada.</p>
+      <div class="archive-filter-toggle">
+        <button type="button" class="pill-tab active" data-archive-filter="completado">✅ Completadas</button>
+        <button type="button" class="pill-tab" data-archive-filter="cancelada">🚫 Canceladas</button>
+      </div>
     </div>
     <div class="archive-list" id="archive-list"></div>
   </section>
@@ -239,6 +275,8 @@
             <option value="en_proceso">En proceso</option>
             <option value="en_revision">En revisión</option>
             <option value="completado">Completado</option>
+            <option value="pausada">⏸ Pausada / atorada</option>
+            <option value="cancelada">🚫 Cancelada</option>
           </select>
         </div>
       </div>
